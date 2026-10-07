@@ -24,7 +24,7 @@ npm run preview  # preview the production build
 npm run lint     # lint
 ```
 
-(Bun works too: `bun install`, `bun run dev`, …)
+(Bun works too)
 
 ## Adding equations
 
