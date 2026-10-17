@@ -87,3 +87,16 @@ test('ships a web app manifest and service worker', async ({ page, request }) =>
   expect((await request.get('/manifest.webmanifest')).ok()).toBe(true)
   expect((await request.get('/sw.js')).ok()).toBe(true)
 })
+
+test('animated mode: fixed camera allows wheel zoom', async ({ page }) => {
+  await page.getByRole('tab', { name: 'animated' }).click()
+  const toggle = page.getByRole('button', { name: 'follow camera' })
+  await toggle.click()
+  await expect(page.getByRole('button', { name: 'fixed camera' })).toHaveAttribute('aria-pressed', 'true')
+  const box = await canvas(page).boundingBox()
+  if (!box) throw new Error('no canvas')
+  const before = await canvas(page).screenshot()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.wheel(0, 600)
+  await expect.poll(async () => Buffer.compare(before, await canvas(page).screenshot())).not.toBe(0)
+})

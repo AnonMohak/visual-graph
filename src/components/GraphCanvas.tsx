@@ -72,6 +72,8 @@ interface GraphCanvasProps {
   unitsPerSec?: number
   /** When true in animated mode, free pan/zoom is allowed and follow-cam is off. */
   unlocked?: boolean
+  /** Animated mode: camera stays centered on the origin; the wheel zooms around the center. */
+  fixedCamera?: boolean
   /** Force coarse sampling (used while the animation is playing). */
   coarse?: boolean
   /** Hide hover crosshair + markers (animated mode v1). */
@@ -177,6 +179,7 @@ export function GraphCanvas({
   drawTime,
   unitsPerSec = DRAW_UNITS_PER_SEC,
   unlocked = false,
+  fixedCamera = false,
   coarse = false,
   disableHover = false,
   plane = 'xy',
@@ -229,6 +232,7 @@ export function GraphCanvas({
   const drawTimeRef = useRef(drawTime)
   const unitsPerSecRef = useRef(unitsPerSec)
   const unlockedRef = useRef(unlocked)
+  const fixedCameraRef = useRef(fixedCamera)
   const coarseRef = useRef(coarse)
   const disableHoverRef = useRef(disableHover)
   const planePropRef = useRef(plane)
@@ -728,6 +732,8 @@ export function GraphCanvas({
     if (drawTime === undefined) return
     // Post-complete: free navigation, follow-cam off, curves stay full.
     if (unlockedRef.current) return
+    // Fixed camera: the view never moves with the pen.
+    if (fixedCameraRef.current) return
     if (isDrawComplete(drawTime, unitsPerSecRef.current ?? DRAW_UNITS_PER_SEC)) return
     // Empty: nothing visible to track — leave the viewport frozen.
     if (!equationsRef.current.some((eq) => eq.visible)) return
@@ -784,6 +790,15 @@ export function GraphCanvas({
     const { w, h } = sizeRef.current
     const width = w || 800
     const height = h || 600
+    if (fixedCameraRef.current) {
+      // Fixed camera: origin at the center, same zoom as the static home.
+      cancelTween()
+      viewportRef.current = defaultHomeFor(planeRef.current, width, height)
+      viewportInitializedRef.current = true
+      samplesRef.current.clear()
+      markDirty()
+      return
+    }
     const home = animatedHomeFor(planeRef.current, width, height)
     // Snap Y to f(xHead) at the start so the pen begins centered.
     const pl = planeRef.current
@@ -1159,6 +1174,7 @@ export function GraphCanvas({
     drawTimeRef.current = drawTime
     unitsPerSecRef.current = unitsPerSec
     unlockedRef.current = unlocked
+    fixedCameraRef.current = fixedCamera
     coarseRef.current = coarse
     disableHoverRef.current = disableHover
     markDirty()
@@ -1171,11 +1187,18 @@ export function GraphCanvas({
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault()
-      if (drawTimeRef.current !== undefined && !unlockedRef.current) return
+      const fixedZoom = drawTimeRef.current !== undefined && fixedCameraRef.current && !unlockedRef.current
+      if (drawTimeRef.current !== undefined && !unlockedRef.current && !fixedZoom) return
       cancelTween()
       const rect = canvas.getBoundingClientRect()
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1
       const factor = Math.exp(-event.deltaY * unit * 0.0015)
+      if (fixedZoom) {
+        // Zoom around the canvas center so the camera stays centered.
+        zoomAt(viewportRef.current, rect.width / 2, rect.height / 2, factor)
+        markDirty()
+        return
+      }
       // Free aspect: Shift zooms y only, Alt zooms x only.
       const axis = viewRef.current.equalAspect ? 'both' : event.shiftKey ? 'y' : event.altKey ? 'x' : 'both'
       zoomAt(viewportRef.current, event.clientX - rect.left, event.clientY - rect.top, factor, axis)

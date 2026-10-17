@@ -156,6 +156,10 @@ The control bar has:
 - a **scrub** bar to jump to any point of the drawing.
 - **speed** in world units per second (0.1 to 5).
 - **loop** (start again at the end) and **reverse** (draw backward).
+- **follow camera / fixed camera**: follow camera (default) keeps the pen
+  at a fixed screen spot and moves the grid. Fixed camera keeps the origin
+  at the center of the screen while the curve draws, and the mouse wheel
+  zooms in and out around the center.
 - **sync sliders**: slider constants such as `a = 1` sweep their range
   together with the pen, so `a*sin(x)` grows while it draws.
 - **record**: plays one full pass from the start and downloads it as a

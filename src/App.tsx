@@ -179,6 +179,7 @@ export default function App() {
   const [loop, setLoop] = useState(false)
   const [reverse, setReverse] = useState(false)
   const [syncSliders, setSyncSliders] = useState(false)
+  const [fixedCamera, setFixedCamera] = useState(false)
   const [recording, setRecording] = useState(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const playbackRef = useRef({ loop, reverse })
@@ -639,6 +640,7 @@ export default function App() {
           drawTime={animated ? drawTime : undefined}
           unitsPerSec={debugSpeed}
           unlocked={unlocked}
+          fixedCamera={animated && fixedCamera}
           coarse={animated && playing}
           disableHover={animated}
           plane={activePlane}
@@ -794,6 +796,12 @@ export default function App() {
               onReverseChange={setReverse}
               syncSliders={syncSliders}
               onSyncChange={setSyncSliders}
+              fixedCamera={fixedCamera}
+              onFixedCameraChange={(fixed) => {
+                setFixedCamera(fixed)
+                // Re-home with the new camera style after the prop reaches the canvas.
+                requestAnimationFrame(() => graphRef.current?.applyAnimatedHome())
+              }}
               recording={recording}
               onRecord={recordSupported ? handleRecord : null}
               unlocked={unlocked}

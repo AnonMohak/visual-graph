@@ -1,4 +1,4 @@
-import { CircleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, RotateCcwIcon, SquareIcon, Undo2Icon } from 'lucide-react'
+import { CircleIcon, LocateFixedIcon, VideoIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, RotateCcwIcon, SquareIcon, Undo2Icon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SPEEDS } from '@/graph/animated'
 import { cn } from '@/lib/utils'
@@ -23,6 +23,9 @@ interface AnimatedControlsProps {
   /** Sweep slider constants together with the pen. */
   syncSliders: boolean
   onSyncChange: (sync: boolean) => void
+  /** Camera: follow the pen, or stay fixed at the center (wheel zooms). */
+  fixedCamera: boolean
+  onFixedCameraChange: (fixed: boolean) => void
   recording: boolean
   /** Start or stop recording a video; null when the browser cannot record. */
   onRecord: (() => void) | null
@@ -72,6 +75,8 @@ export function AnimatedControls({
   onReverseChange,
   syncSliders,
   onSyncChange,
+  fixedCamera,
+  onFixedCameraChange,
   recording,
   onRecord,
   unlocked = false,
@@ -133,6 +138,16 @@ export function AnimatedControls({
           >
             {t('sync sliders')}
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={fixedCamera}
+            title="camera: follow the pen, or stay fixed at the center (mouse wheel zooms)"
+            onClick={() => onFixedCameraChange(!fixedCamera)}
+          >
+            {fixedCamera ? <LocateFixedIcon data-icon="inline-start" /> : <VideoIcon data-icon="inline-start" />}
+            {fixedCamera ? t('fixed camera') : t('follow camera')}
+          </Button>
           {onRecord && (
             <Button
               variant={recording ? 'destructive' : 'outline'}
@@ -153,7 +168,9 @@ export function AnimatedControls({
             ? 'recording — stops when the drawing completes'
             : unlocked
               ? 'complete — pan/zoom free · follow-cam off'
-              : 'follow-cam locked — grid tracks pen · wheel/drag locked'}
+              : fixedCamera
+                ? 'fixed camera — centered on the origin · wheel zooms'
+                : 'follow-cam locked — grid tracks pen · wheel/drag locked'}
         </div>
       </div>
     </div>
