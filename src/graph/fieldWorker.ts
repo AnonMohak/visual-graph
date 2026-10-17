@@ -4,13 +4,14 @@
 
 import { envFromDefs } from './equations'
 import { parseEquation } from './parse'
-import { computeFieldImage } from './field'
+import { computeFieldImage, type Contours } from './field'
 import type { Viewport } from './types'
 
 interface FieldJob {
   jobId: number
   raw: string | null
   defs?: string[]
+  contours?: Contours
   width: number
   height: number
   viewport: Viewport
@@ -19,7 +20,7 @@ interface FieldJob {
 }
 
 self.onmessage = (event: MessageEvent<FieldJob>) => {
-  const { jobId, raw, defs, width, height, viewport, terms, step } = event.data
+  const { jobId, raw, defs, contours, width, height, viewport, terms, step } = event.data
   if (!width || !height || width > 4096 || height > 4096) return
   let evaluate: Parameters<typeof computeFieldImage>[3] = null
   if (raw) {
@@ -31,7 +32,7 @@ self.onmessage = (event: MessageEvent<FieldJob>) => {
     }
   }
   try {
-    const img = computeFieldImage(width, height, viewport, evaluate, { terms, step })
+    const img = computeFieldImage(width, height, viewport, evaluate, { terms, step, contours })
     self.postMessage({ jobId, buffer: img.data.buffer, width, height })
   } catch {
     // Worker must never throw back to the main thread loop.

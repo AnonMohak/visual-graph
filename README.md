@@ -111,6 +111,40 @@ and operators `+ - * / ^ ( )`.
 - **"no real points in view"** under a legend entry means the curve has no
   plottable values in the current viewport — pan/zoom or press `f` to fit.
 
+## Complex mode
+
+The plane switch at the top has three planes:
+
+| Plane   | What it shows                                                     |
+|---------|-------------------------------------------------------------------|
+| `xy`    | Normal curves. A complex expression in `t` is drawn as one component (re, im, \|.\|, arg) of f(σ + i t) at a fixed σ. |
+| `σ-t`   | Domain coloring of f(s) over s = σ + i t: hue = arg f, brightness = log \|f\|. |
+| `Re-Im` | The path of f(σ + i t) for t in [-30, 30], drawn as (Re f, Im f). |
+
+Complex input:
+
+- Use `s` (or `z`) for the complex variable and `i` for the imaginary unit:
+  `zeta(s)`, `1/(s-1)`, `s^2 + 1`, `zeta(0.5 + i*t)`.
+- Built-in functions: `zeta` (Riemann zeta), `eta` (Dirichlet eta),
+  `gamma`, `beta` (Dirichlet beta, the L-function for the character mod 4),
+  `lambda` (Dirichlet lambda), `xi` (Riemann xi), and `re im abs arg conj`.
+- Your own functions work too: `f(s) = zeta(s)*gamma(s/2)`, then `f(s)`.
+- When an expression looks complex, the input bar offers to switch planes
+  and shows the σ slider and the component buttons.
+
+In the **σ-t** plane:
+
+- The field shows any complex equation; with several, pick one with the
+  **field** selector at the bottom. With none, it shows ζ(s).
+- The toolbar toggles **|f| lines** (where \|f\| is a power of 2), **arg
+  lines** (where arg f is a multiple of π/6), the **zeros** markers on the
+  critical line, and a **list** of the first 30 nontrivial zeros. Click a
+  zero in the list to center the view on it.
+
+In the **Re-Im** plane (and in `xy` with complex curves), a σ slider sits
+above the input bar. Press play to sweep σ from -1 to 2 and watch the
+curve change; the loop button bounces it back and forth.
+
 ## Analysis
 
 The toolbar under the theme switch (xy plane) has three toggles:

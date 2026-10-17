@@ -5,6 +5,8 @@ import { AnimatedControls } from '@/components/AnimatedControls'
 import { AnimatedModeToggle, type GraphMode } from '@/components/AnimatedModeToggle'
 import { CommandBar, type CommandBarApi } from '@/components/CommandBar'
 import { DataPanel } from '@/components/DataPanel'
+import { ParamSlider } from '@/components/ParamSlider'
+import { ZerosPanel } from '@/components/ZerosPanel'
 import { EmptyGraph } from '@/components/EmptyGraph'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { GraphCanvas, type GraphApi } from '@/components/GraphCanvas'
@@ -33,8 +35,11 @@ import {
   type ShareState,
   type ShareStyle,
 } from '@/graph/share'
-import type { ComplexComponent, Plane, Viewport } from '@/graph/types'
+import { isComplexKind, type ComplexComponent, type Plane, type Viewport } from '@/graph/types'
 import { niceStep } from '@/graph/viewport'
+
+/** σ slider range for the Re-Im view and complex slices. */
+const SIGMA_RANGE = { min: -1, max: 2, step: 0.01 }
 
 const STORAGE_KEY_V2 = 'graph.equations.v2'
 const STORAGE_KEY_V1 = 'graph.equations.v1'
@@ -161,6 +166,9 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [dataOpen, setDataOpen] = useState(false)
+  const [contours, setContours] = useState({ mod: false, arg: false })
+  const [showZeros, setShowZeros] = useState(true)
+  const [zerosOpen, setZerosOpen] = useState(false)
   const [embed] = useState(() => new URLSearchParams(window.location.search).has('embed'))
   const graphRef = useRef<GraphApi | null>(null)
   const commandRef = useRef<CommandBarApi | null>(null)
@@ -553,6 +561,8 @@ export default function App() {
           defRaws={animated ? animatedBuilt.defRaws : built.defRaws}
           analysis={animated ? undefined : analysis}
           onSnap={setSnapX}
+          contours={contours}
+          showZeros={showZeros}
         />
         {!embed && (
         <div
@@ -598,6 +608,34 @@ export default function App() {
         )}
         {!animated && activePlane === 'xy' && viewOpen && (
           <ViewPanel view={view} onChange={changeView} onClose={() => setViewOpen(false)} />
+        )}
+        {!embed && activePlane === 'st' && (
+          <ToggleBar
+            label="field"
+            className="absolute left-1/2 top-[132px] z-10 -translate-x-1/2"
+            options={[
+              { key: 'mod', label: '|f| lines', title: 'contours where |f| is a power of 2', active: contours.mod },
+              { key: 'arg', label: 'arg lines', title: 'contours where arg f is a multiple of π/6', active: contours.arg },
+              { key: 'zeros', label: 'zeros', title: 'mark nontrivial zeta zeros', active: showZeros },
+              { key: 'list', label: 'list', title: 'list of zeta zeros', active: zerosOpen },
+            ]}
+            onToggle={(key) => {
+              if (key === 'zeros') setShowZeros((prev) => !prev)
+              else if (key === 'list') setZerosOpen((prev) => !prev)
+              else setContours((prev) => ({ ...prev, [key]: !prev[key as 'mod' | 'arg'] }))
+            }}
+          />
+        )}
+        {activePlane === 'st' && zerosOpen && (
+          <ZerosPanel onPick={(t) => graphRef.current?.centerOn(0.5, t)} onClose={() => setZerosOpen(false)} />
+        )}
+        {!animated && (activePlane === 'reim' || (activePlane === 'xy' && plotted.some((eq) => isComplexKind(eq.kind)))) && (
+          <div className="absolute bottom-32 left-1/2 z-10 w-72 -translate-x-1/2 rounded-lg border bg-background/85 px-2 py-1 text-xs backdrop-blur-md max-sm:w-[calc(100%-1rem)]">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-muted-foreground">σ={sigma}</span>
+              <ParamSlider name="σ" value={sigma} onChange={setSigma} range={SIGMA_RANGE} className="flex-1 pl-0 pt-0" />
+            </div>
+          </div>
         )}
         {!embed && !animated && dataOpen && (
           <DataPanel equations={plotted} onAdd={addRaw} onClose={() => setDataOpen(false)} />

@@ -85,6 +85,9 @@ const KNOWN_SYMBOLS = [
   'zeta',
   'gamma',
   'eta',
+  'beta',
+  'lambda',
+  'xi',
   're',
   'im',
   'arg',
@@ -405,7 +408,7 @@ function finiteReal(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
 }
 
-const COMPLEX_FN_RE = /(zeta|gamma|eta)/i
+const COMPLEX_FN_RE = /(zeta|gamma|eta|lambda|xi)/i
 const VAR_S_Z_RE = /\b[sz]\b/
 const VAR_T_RE = /\bt\b/
 const VAR_I_RE = /\bi\b/

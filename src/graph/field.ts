@@ -2,9 +2,17 @@ import type { EvaluateComplexFn, Viewport } from './types'
 import { screenToWorldX, screenToWorldY } from './viewport'
 import { cAbs, cArg, zetaComplex } from './zeta'
 
+export interface Contours {
+  /** Lines where |f| is a power of 2. */
+  mod: boolean
+  /** Lines where arg(f) is a multiple of pi/6. */
+  arg: boolean
+}
+
 export interface FieldOptions {
   terms?: number
   step?: number
+  contours?: Contours
 }
 
 function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
@@ -27,7 +35,8 @@ function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
 /** Domain coloring: hue=arg(z), brightness=log|z|. Pole s=1 clipped to dark. */
 export function fieldColorFor(
   z: { re: number; im: number } | null,
-  sDistToPole: number
+  sDistToPole: number,
+  contours?: Contours
 ): [number, number, number, number] {
   if (sDistToPole < 0.02) return [10, 12, 14, 255] // clipped pole s=1
   if (!z || !Number.isFinite(z.re) || !Number.isFinite(z.im)) return [0, 0, 0, 0]
@@ -38,7 +47,15 @@ export function fieldColorFor(
   const logMag = Math.log(mag + 1e-12) / Math.LN2
   const ring = Math.abs(((logMag % 1) + 1) % 1 - 0.5) * 2 // 0..1
   const base = 0.55 + 0.3 * Math.tanh(logMag / 4)
-  const v = Math.min(1, Math.max(0.15, base - ring * 0.12))
+  let v = Math.min(1, Math.max(0.15, base - ring * 0.12))
+  if (contours?.mod) {
+    const frac = ((logMag % 1) + 1) % 1
+    if (Math.min(frac, 1 - frac) < 0.05) v *= 0.4
+  }
+  if (contours?.arg) {
+    const sector = (((cArg(z) / (Math.PI / 6)) % 1) + 1) % 1
+    if (Math.min(sector, 1 - sector) < 0.04) v *= 0.5
+  }
   const s = mag < 1e-3 || mag > 1e3 ? 0.55 : 0.9
   const [r, g, b] = hsvToRgb(hue, s, v)
   return [r, g, b, 255]
@@ -71,7 +88,7 @@ export function computeFieldImage(
       } else {
         z = zetaComplex({ re: wx, im: wy }, { terms })
       }
-      const [r, g, b, a] = fieldColorFor(z, poleDist)
+      const [r, g, b, a] = fieldColorFor(z, poleDist, opts?.contours)
       // Fill step x step block for coarse mode.
       for (let oy = 0; oy < step && py + oy < height; oy++) {
         for (let ox = 0; ox < step && sx + ox < width; ox++) {

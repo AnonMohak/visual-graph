@@ -17,7 +17,7 @@ import { resolveGraphColors, type GraphColors } from '@/graph/color'
 import { setZetaCoarse } from '@/graph/complex'
 import { findFeatures, findIntersections, type Feature } from '@/graph/analysis'
 import { DEFAULT_VIEW, toLog, transformForAxes, type ViewSettings } from '@/graph/view'
-import { computeFieldImage } from '@/graph/field'
+import { computeFieldImage, type Contours } from '@/graph/field'
 import { sampleImplicit } from '@/graph/implicit'
 import { drawField, drawGraph, drawParametric, type RenderCurve, type RenderState } from '@/graph/render'
 import { SvgContext } from '@/graph/svg'
@@ -54,6 +54,8 @@ export interface GraphApi {
   getHomes: () => Record<Plane, Viewport | null>
   setHomes: (homes: Partial<Record<Plane, Viewport>>) => void
   applyAnimatedHome: () => void
+  /** Pan so world point (x, y) is at the canvas center (keeps the zoom). */
+  centerOn: (x: number, y: number) => void
   /** Current view as a PNG (raster) or SVG (vector) file. */
   exportImage: (kind: 'png' | 'svg') => Promise<Blob | null>
 }
@@ -89,7 +91,13 @@ interface GraphCanvasProps {
   onSnap?: (x: number) => void
   /** Grid, axes, labels, aspect and log-axis settings. */
   view?: ViewSettings
+  /** Contour lines on the domain-coloring field (σ-t plane). */
+  contours?: Contours
+  /** Mark the known nontrivial zeta zeros on the σ-t field. */
+  showZeros?: boolean
 }
+
+const NO_CONTOURS: Contours = { mod: false, arg: false }
 
 const NO_ANALYSIS = { points: false, tangent: false }
 
@@ -180,6 +188,8 @@ export function GraphCanvas({
   analysis = NO_ANALYSIS,
   onSnap,
   view = DEFAULT_VIEW,
+  contours = NO_CONTOURS,
+  showZeros = true,
 }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fieldCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -206,6 +216,8 @@ export function GraphCanvas({
   const defRawsRef = useRef(defRaws)
   const analysisRef = useRef(analysis)
   const viewRef = useRef(view)
+  const contoursRef = useRef(contours)
+  const showZerosRef = useRef(showZeros)
   const onSnapRef = useRef(onSnap)
   const featuresRef = useRef<{ sig: string; features: Feature[] }>({ sig: '', features: [] })
   const pressRef = useRef<{ x: number; y: number } | null>(null)
@@ -302,7 +314,7 @@ export function GraphCanvas({
         worker.removeEventListener('message', onMsg as EventListener)
       }
       worker.addEventListener('message', onMsg as EventListener)
-      worker.postMessage({ jobId, raw, defs: defRawsRef.current, width: w, height: h, viewport: { ...vp }, terms, step })
+      worker.postMessage({ jobId, raw, defs: defRawsRef.current, contours: contoursRef.current, width: w, height: h, viewport: { ...vp }, terms, step })
       return
     } catch {
       // Worker unavailable — synchronous fallback below.
@@ -317,7 +329,7 @@ export function GraphCanvas({
       } else if (fieldEq?.evaluateComplex) {
         evaluate = fieldEq.evaluateComplex
       }
-      const img = computeFieldImage(w, h, vp, evaluate, { terms, step })
+      const img = computeFieldImage(w, h, vp, evaluate, { terms, step, contours: contoursRef.current })
       let canvas = fieldImageRef.current?.canvas ?? document.createElement('canvas')
       canvas.width = w
       canvas.height = h
@@ -791,7 +803,7 @@ export function GraphCanvas({
       const vp = viewportRef.current
       const fieldEq = resolveFieldEq()
       // Field signature keyed by stable equation id (fallback zeta), not raw text.
-      const fieldSig = `${Math.round(vp.scale * 10)}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${fieldEq ? fieldEq.id + fieldEq.rev : 'zeta'}|${spacing}`
+      const fieldSig = `${Math.round(vp.scale * 10)}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${fieldEq ? fieldEq.id + fieldEq.rev : 'zeta'}|${spacing}|${contoursRef.current.mod}${contoursRef.current.arg}`
       requestField(fieldSig, w, h, vp, fieldEq)
       const fieldCanvas = fieldImageRef.current?.sig === fieldSig ? fieldImageRef.current.canvas : null
       // Publish a trivial status for legend.
@@ -809,6 +821,7 @@ export function GraphCanvas({
         snapX: null,
         labels: { x: 'σ', y: 't' },
         disableHover: disableHoverRef.current,
+        showZeros: showZerosRef.current,
       }
       lastRenderRef.current = { draw: (target) => drawField(target, fieldState, fieldCanvas) }
       drawField(ctx, fieldState, fieldCanvas)
@@ -1067,6 +1080,11 @@ export function GraphCanvas({
         }
       },
       applyAnimatedHome,
+      centerOn: (x, y) => {
+        const { w, h } = sizeRef.current
+        const vp = viewportRef.current
+        animateTo({ ...vp, originX: w / 2 - x * vp.scale, originY: h / 2 + y * yScale(vp) })
+      },
       exportImage: async (kind) => {
         const canvas = canvasRef.current
         if (!canvas) return null
@@ -1087,6 +1105,8 @@ export function GraphCanvas({
   useEffect(() => {
     equationsRef.current = plottable(equations, view, plane)
     viewRef.current = view
+    contoursRef.current = contours
+    showZerosRef.current = showZeros
     defRawsRef.current = defRaws
     analysisRef.current = analysis
     onSnapRef.current = onSnap

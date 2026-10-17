@@ -8,11 +8,15 @@ interface ParamSliderProps {
   name: string
   value: number
   onChange: (value: number) => void
+  /** Fixed range; default fits the value in [-10, 10]. */
+  range?: { min: number; max: number; step: number }
+  className?: string
 }
 
 /** Range input for a constant, with play (sweep) and loop (bounce) controls. */
-export function ParamSlider({ name, value, onChange }: ParamSliderProps) {
-  const [range] = useState(() => sliderRange(value))
+export function ParamSlider({ name, value, onChange, range: fixedRange, className }: ParamSliderProps) {
+  const [autoRange] = useState(() => sliderRange(value))
+  const range = fixedRange ?? autoRange
   const [playing, setPlaying] = useState(false)
   const [loop, setLoop] = useState(true)
   const valueRef = useRef(value)
@@ -50,7 +54,7 @@ export function ParamSlider({ name, value, onChange }: ParamSliderProps) {
   }, [playing, loop, range])
 
   return (
-    <div className="flex items-center gap-1.5 pl-[1.1rem] pt-0.5">
+    <div className={cn('flex items-center gap-1.5 pl-[1.1rem] pt-0.5', className)}>
       <Button
         variant="ghost"
         size="icon-xs"

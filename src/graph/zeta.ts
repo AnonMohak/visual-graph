@@ -233,3 +233,65 @@ export function etaComplex(sIn: C, opts?: ZetaOptions): C | null {
   const out = cMul(factor, z)
   return isFiniteC(out) ? out : null
 }
+
+/** Dirichlet beta: sum_{n>=0} (-1)^n (2n+1)^{-s}; functional equation for Re(s) <= 0. */
+export function betaComplex(sIn: C, opts?: ZetaOptions): C | null {
+  const s = toC(sIn)
+  if (!isFiniteC(s)) return null
+  const terms = opts?.terms ?? DEFAULT_TERMS
+  if (s.re > 0) {
+    // Average of the last two partial sums damps the alternating error.
+    let acc: C = { re: 0, im: 0 }
+    let prev: C = acc
+    for (let n = 0; n < terms; n++) {
+      const ln = Math.log(2 * n + 1)
+      const term = cExp({ re: -s.re * ln, im: -s.im * ln })
+      prev = acc
+      acc = n % 2 === 0 ? cAdd(acc, term) : cSub(acc, term)
+    }
+    const out = { re: (acc.re + prev.re) / 2, im: (acc.im + prev.im) / 2 }
+    return isFiniteC(out) ? out : null
+  }
+  // beta(1 - w) = (2/pi)^w sin(pi w / 2) Gamma(w) beta(w), with w = 1 - s.
+  const w: C = { re: 1 - s.re, im: -s.im }
+  const inner = betaComplex(w, opts)
+  if (!inner) return null
+  const lnTwoOverPi = Math.log(2 / Math.PI)
+  const factor = cMul(
+    cExp({ re: w.re * lnTwoOverPi, im: w.im * lnTwoOverPi }),
+    cMul(cSin({ re: (Math.PI * w.re) / 2, im: (Math.PI * w.im) / 2 }), complexGamma(w))
+  )
+  const out = cMul(factor, inner)
+  return isFiniteC(out) && cAbs(out) < 1e7 ? out : null
+}
+
+/** Dirichlet lambda: (1 - 2^{-s}) zeta(s). */
+export function lambdaComplex(sIn: C, opts?: ZetaOptions): C | null {
+  const s = toC(sIn)
+  const z = zetaComplex(s, opts)
+  if (!z) return null
+  const out = cMul(cSub({ re: 1, im: 0 }, pow2({ re: -s.re, im: -s.im })), z)
+  return isFiniteC(out) ? out : null
+}
+
+/** Riemann xi: (1/2) s (s - 1) pi^{-s/2} Gamma(s/2) zeta(s). Entire; real on the critical line. */
+export function xiComplex(sIn: C, opts?: ZetaOptions): C | null {
+  const s = toC(sIn)
+  if (cAbs(s) < 1e-12 || cAbs(cSub(s, { re: 1, im: 0 })) < 1e-4) return { re: 0.5, im: 0 }
+  const z = zetaComplex(s, opts)
+  if (!z) return null
+  const half: C = { re: s.re / 2, im: s.im / 2 }
+  const g = complexGamma(half)
+  const p = powPi({ re: -half.re, im: -half.im })
+  const poly = cMul(half, { re: s.re - 1, im: s.im })
+  const out = cMul(cMul(poly, p), cMul(g, z))
+  return isFiniteC(out) ? out : null
+}
+
+/** Ordinates t of the first 30 nontrivial zeta zeros 1/2 + i t. */
+export const ZETA_ZEROS = [
+  14.134725, 21.02204, 25.010858, 30.424876, 32.935062, 37.586178, 40.918719, 43.327073, 48.005151,
+  49.773832, 52.970321, 56.446248, 59.347044, 60.831779, 65.112544, 67.079811, 69.546402, 72.067158,
+  75.704691, 77.14484, 79.337375, 82.910381, 84.735493, 87.425275, 88.809111, 92.491899, 94.651344,
+  95.870634, 98.831194, 101.317851,
+]

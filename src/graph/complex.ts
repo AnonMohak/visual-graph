@@ -1,9 +1,12 @@
 import { complex as mathComplex, type Complex } from 'mathjs'
 import {
+  betaComplex,
   cAbs,
   cArg,
   complexGamma,
   etaComplex,
+  lambdaComplex,
+  xiComplex,
   toC,
   zetaComplex,
   zetaTerms,
@@ -66,6 +69,18 @@ export function gammaFn(z: unknown): number | Complex {
   return toMath(out)
 }
 
+function wrap(fn: (s: C, opts: { terms: number }) => C | null, name: string) {
+  return (s: unknown): number | Complex => {
+    const out = fn(asC(s), { terms: currentTerms() })
+    if (!out) throw new Error(`${name} divergence`)
+    return toMath(out)
+  }
+}
+
+export const betaFn = wrap(betaComplex, 'beta')
+export const lambdaFn = wrap(lambdaComplex, 'lambda')
+export const xiFn = wrap(xiComplex, 'xi')
+
 export function reFn(z: unknown): number {
   return asC(z).re
 }
@@ -95,6 +110,9 @@ export function complexScopeExtras(): Record<string, unknown> {
     zeta: zetaFn,
     gamma: gammaFn,
     eta: etaFn,
+    beta: betaFn,
+    lambda: lambdaFn,
+    xi: xiFn,
     re: reFn,
     im: imFn,
     abs: absFn,

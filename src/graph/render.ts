@@ -46,13 +46,15 @@ export interface RenderState {
   features?: Feature[]
   /** Draw the tangent line of each curve at the hover x. */
   tangent?: boolean
+  /** Zero markers on the field (default on). */
+  showZeros?: boolean
   /** Grid/axes visibility, custom grid step and labels, log axes. */
   view?: RenderView
 }
 
 export type RenderView = Pick<ViewSettings, 'grid' | 'axes' | 'gridStep' | 'logX' | 'logY' | 'xLabel' | 'yLabel'>
 
-export const ZERO_TS = [14.1347, 21.022, 25.0109]
+import { ZETA_ZEROS as ZERO_TS } from './zeta'
 
 const MONO_FONT = '"Geist Mono Variable", ui-monospace, monospace'
 const MAX_MINOR_LINES = 4000
@@ -646,7 +648,7 @@ export function drawGraph(ctx: CanvasRenderingContext2D, state: RenderState): vo
     drawGrid(ctx, state, steps, false, colors.gridMajor)
   }
   drawAxesAndLabels(ctx, state, steps)
-  if (state.field) drawZeroMarkers(ctx, state)
+  if (state.field && state.showZeros !== false) drawZeroMarkers(ctx, state)
   drawCurves(ctx, state)
   drawTangents(ctx, state)
   drawFeatures(ctx, state)
