@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Kbd } from '@/components/ui/kbd'
-import { parseEquation, type Env, type ParseFailure } from '@/graph/parse'
+import { type Env, type ParseFailure } from '@/graph/parse'
+import { parseWithSliders } from '@/graph/sliders'
 import type { ComplexComponent, Plane } from '@/graph/types'
 import { cn } from '@/lib/utils'
 
@@ -65,8 +66,11 @@ const EMPTY_ENV: Env = {}
 function parseLines(lines: string[], env: Env) {
   const local: Env = { ...env }
   return lines.map((line) => {
-    const result = parseEquation(line, local)
-    if (result.ok && result.def) local[result.def.name] = result.def.type === 'const' ? result.def.value : result.def.fn
+    const result = parseWithSliders(line, local)
+    if (result.ok) {
+      for (const slider of result.sliders ?? []) local[slider.split(' ')[0]] = 1
+      if (result.def) local[result.def.name] = result.def.type === 'const' ? result.def.value : result.def.fn
+    }
     return result
   })
 }
@@ -97,7 +101,7 @@ export function CommandBar({
     setStoredNotice({ value, tone, text })
   }
 
-  const preview = useMemo(() => (value.trim() ? parseEquation(value, env) : null), [value, env])
+  const preview = useMemo(() => (value.trim() ? parseWithSliders(value, env) : null), [value, env])
   const previewComplex = preview && preview.ok && preview.kind !== 'real'
 
   const placeholder =
@@ -142,7 +146,7 @@ export function CommandBar({
     const valid: string[] = []
     let firstError: ParseFailure | null = null
     for (const result of parseLines(lines, env)) {
-      if (result.ok) valid.push(result.raw)
+      if (result.ok) valid.push(...(result.sliders ?? []), result.raw)
       else if (!firstError) firstError = result
     }
     if (valid.length) onAdd(valid)
@@ -187,7 +191,7 @@ export function CommandBar({
     const valid: string[] = []
     let error: ParseFailure | null = null
     for (const result of parseLines(lines, env)) {
-      if (result.ok) valid.push(result.raw)
+      if (result.ok) valid.push(...(result.sliders ?? []), result.raw)
       else if (!error) error = result
     }
     if (valid.length) onAdd(valid)
@@ -283,6 +287,18 @@ export function CommandBar({
     )
   } else if (preview && !preview.ok) {
     statusRow = <span className="truncate text-destructive">{preview.message}</span>
+  } else if (preview?.ok && preview.sliders && latexHtml) {
+    statusRow = (
+      <span className="flex min-w-0 items-center gap-2 truncate">
+        <span
+          className="katex-preview truncate [&_.katex]:text-foreground"
+          dangerouslySetInnerHTML={{ __html: latexHtml }}
+        />
+        <span className="shrink-0 text-muted-foreground">
+          + slider{preview.sliders.length > 1 ? 's' : ''} {preview.sliders.map((slider) => slider.split(' ')[0]).join(', ')}
+        </span>
+      </span>
+    )
   } else if (latexHtml) {
     statusRow = (
       <span

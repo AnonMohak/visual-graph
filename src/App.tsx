@@ -13,6 +13,7 @@ import { ReadoutPanel } from '@/components/ReadoutPanel'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete } from '@/graph/animated'
 import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/graph/equations'
+import { formatSliderValue, sliderOf } from '@/graph/sliders'
 import { decodeShareState, encodeShareState, shareVpToViewport } from '@/graph/share'
 import type { ComplexComponent, Plane, Viewport } from '@/graph/types'
 import { niceStep } from '@/graph/viewport'
@@ -245,6 +246,16 @@ export default function App() {
     setActiveSpecs((prev) => prev.filter((spec) => spec.id !== id))
   }
 
+  const setConst = (id: string, value: number) => {
+    setActiveSpecs((prev) =>
+      prev.map((spec) => {
+        if (spec.id !== id) return spec
+        const slider = sliderOf(spec.raw)
+        return slider ? { ...spec, raw: `${slider.name} = ${formatSliderValue(value)}` } : spec
+      })
+    )
+  }
+
   const getStepSize = (): number => {
     const viewport = graphRef.current?.getViewport()
     return viewport ? niceStep(viewport.scale) / 5 : 1
@@ -434,7 +445,7 @@ export default function App() {
         )}
         <AnimatedModeToggle mode={mode} onChange={switchMode} />
         <PlaneToggle plane={activePlane} onChange={switchPlane} />
-        <Legend equations={activeEquations} onToggle={toggleEquation} onDelete={deleteEquation} sigma={sigma} component={component} />
+        <Legend equations={activeEquations} onToggle={toggleEquation} onDelete={deleteEquation} onSetConst={setConst} sigma={sigma} component={component} />
         {!animated && (
           <CommandBar
             ref={commandRef}

@@ -40,6 +40,9 @@ Tips:
 - Implicit multiplication works: `2x`, `2(x+1)`, `x sin(x)`, `2pi x`.
 - Define constants and functions, then reuse them: `a = 2`, `f(x) = a*x^2`,
   then `f(x+1)`. Definitions can appear in any order.
+- Sliders: unknown single letters become parameters. `a*sin(b*x)` adds
+  `a = 1` and `b = 1` with sliders in the legend. Press play to sweep a
+  value; the loop button bounces it back and forth.
 - Piecewise: `x < 0 ? -x : x^2` or `piecewise(x < 0, -x, x^2)`.
 - Invalid input shows an inline error and moves the cursor to the problem
   spot; nothing is added until it parses.

@@ -52,3 +52,16 @@ describe('buildEquations', () => {
     expect(parseEquation('sin = 2').ok).toBe(false)
   })
 })
+
+describe('sliders', async () => {
+  const { parseWithSliders, sliderOf } = await import('../sliders')
+  it('auto-defines free symbols', () => {
+    const r = parseWithSliders('a*sin(b*x)', {})
+    expect(r.ok).toBe(true)
+    if (r.ok) expect(r.sliders).toEqual(['a = 1', 'b = 1'])
+  })
+  it('recognises slider definitions', () => {
+    expect(sliderOf('a = -2.5')).toEqual({ name: 'a', value: -2.5 })
+    expect(sliderOf('a = 2*pi')).toBeNull()
+  })
+})

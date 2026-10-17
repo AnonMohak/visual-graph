@@ -3,6 +3,8 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { ParamSlider } from '@/components/ParamSlider'
+import { sliderOf } from '@/graph/sliders'
 import { useCurveStatus } from '@/graph/store'
 import type { ComplexComponent, Equation } from '@/graph/types'
 import { CHART_CLASSES } from '@/lib/chart'
@@ -12,13 +14,15 @@ interface LegendProps {
   equations: Equation[]
   onToggle: (id: string) => void
   onDelete: (id: string) => void
+  /** Set a slider constant to a new value. */
+  onSetConst?: (id: string, value: number) => void
   className?: string
   /** Live global sampler props — badges reflect these, not stale per-equation defaults. */
   sigma?: number
   component?: ComplexComponent
 }
 
-export function Legend({ equations, onToggle, onDelete, className, sigma = 0.5, component = 're' }: LegendProps) {
+export function Legend({ equations, onToggle, onDelete, onSetConst, className, sigma = 0.5, component = 're' }: LegendProps) {
   const status = useCurveStatus()
   if (equations.length === 0) return null
 
@@ -38,6 +42,7 @@ export function Legend({ equations, onToggle, onDelete, className, sigma = 0.5, 
         <ul className="flex flex-col gap-0.5 p-1">
           {equations.map((equation) => {
             const hasPoints = status[equation.id]
+            const slider = sliderOf(equation.raw)
             return (
               <li
                 key={equation.id}
@@ -103,6 +108,13 @@ export function Legend({ equations, onToggle, onDelete, className, sigma = 0.5, 
                     </>
                   )}
                 </div>
+                {slider && onSetConst && (
+                  <ParamSlider
+                    name={slider.name}
+                    value={slider.value}
+                    onChange={(value) => onSetConst(equation.id, value)}
+                  />
+                )}
                 {equation.error && (
                   <span className="pl-[1.1rem] text-[11px] text-destructive">{equation.error}</span>
                 )}
