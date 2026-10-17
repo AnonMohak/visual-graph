@@ -6,6 +6,13 @@ export type EvaluateComplexFn = (s: Complex) => Complex | null
 export type Plane = 'xy' | 'st' | 'reim'
 export type EquationKind = 'real' | 'complex-slice' | 'complex-param' | 'parametric' | 'polar' | 'implicit'
 
+/** Shaded area under a curve between a and b, with its signed value. */
+export interface AreaInfo {
+  a: number
+  b: number
+  value: number
+}
+
 export type Relation = '=' | '<' | '<=' | '>' | '>='
 
 /** F(x, y) for implicit curves: the relation compares F with 0. */
@@ -24,6 +31,7 @@ export interface Equation {
   evaluatePoint?: EvaluatePointFn
   evaluateXY?: EvaluateXYFn
   relation?: Relation
+  area?: AreaInfo
   /** Parameter range for parametric/polar curves. */
   tRange?: [number, number]
   kind: EquationKind

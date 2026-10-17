@@ -70,3 +70,30 @@ describe('implicit curves', async () => {
     expect(r.ok && r.sliders).toEqual(['a = 1'])
   })
 })
+
+describe('calculus helpers', async () => {
+  const { buildEquations } = await import('../equations')
+  it('differentiates numerically', () => {
+    const r = parseEquation('d/dx(x^3)')
+    expect(r.ok && r.evaluate(2)).toBeCloseTo(12, 4)
+    const nested = parseEquation('d/dx(d/dx(x^3))')
+    expect(nested.ok && nested.evaluate(2)).toBeCloseTo(12, 2)
+  })
+
+  it("supports f'(x) for user functions", () => {
+    const spec = (raw: string) => ({ id: raw, raw, colorToken: 0, visible: true })
+    const { equations } = buildEquations([spec('f(x) = sin(x)'), spec("f'(x)")])
+    expect(equations[1].evaluate(0)).toBeCloseTo(1, 5)
+  })
+
+  it('integrates with a variable bound', () => {
+    const r = parseEquation('integral(t^2, 0, x)')
+    expect(r.ok && r.evaluate(3)).toBeCloseTo(9, 6)
+  })
+
+  it('shades an area with constant bounds', () => {
+    const r = parseEquation('integral(x^2, 0, 3)')
+    expect(r.ok && r.area?.value).toBeCloseTo(9, 6)
+    expect(r.ok && r.evaluate(2)).toBe(4)
+  })
+})

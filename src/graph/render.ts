@@ -1,5 +1,5 @@
 import type { GraphColors } from './color'
-import type { CurveSamples, EvaluateFn, Viewport } from './types'
+import type { AreaInfo, CurveSamples, EvaluateFn, Viewport } from './types'
 import { formatNumber, formatTick, niceStep, screenToWorldX, screenToWorldY, worldToScreenX, worldToScreenY } from './viewport'
 
 export interface RenderCurve {
@@ -8,6 +8,8 @@ export interface RenderCurve {
   visible: boolean
   samples: CurveSamples
   evaluate: EvaluateFn
+  /** Shaded area between the curve and the x-axis. */
+  area?: AreaInfo
   /** Strict inequality: draw the boundary dashed. */
   strict?: boolean
 }
@@ -148,6 +150,38 @@ function drawAxesAndLabels(ctx: CanvasRenderingContext2D, state: RenderState): v
   }
 }
 
+function drawArea(ctx: CanvasRenderingContext2D, state: RenderState, curve: RenderCurve, color: string): void {
+  const area = curve.area
+  if (!area) return
+  const { viewport: vp, width } = state
+  const left = Math.max(area.a, screenToWorldX(vp, -2))
+  const right = Math.min(area.b, screenToWorldX(vp, width + 2))
+  if (left >= right) return
+  const steps = Math.max(2, Math.ceil((right - left) * vp.scale))
+  const axisY = worldToScreenY(vp, 0)
+  ctx.save()
+  ctx.fillStyle = color
+  ctx.globalAlpha = 0.22
+  ctx.beginPath()
+  ctx.moveTo(worldToScreenX(vp, left), axisY)
+  for (let k = 0; k <= steps; k++) {
+    const x = left + ((right - left) * k) / steps
+    const y = curve.evaluate(x)
+    ctx.lineTo(worldToScreenX(vp, x), y === null ? axisY : worldToScreenY(vp, y))
+  }
+  ctx.lineTo(worldToScreenX(vp, right), axisY)
+  ctx.closePath()
+  ctx.fill()
+  ctx.globalAlpha = 1
+  ctx.font = `11px ${MONO_FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  ctx.fillStyle = color
+  const mid = (left + right) / 2
+  ctx.fillText(`∫ = ${formatNumber(area.value, 5)}`, worldToScreenX(vp, mid), axisY - 6)
+  ctx.restore()
+}
+
 function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
   const { viewport: vp, colors } = state
   ctx.lineWidth = 2
@@ -171,6 +205,7 @@ function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
       ctx.fill()
       ctx.globalAlpha = 1
     }
+    if (curve.area) drawArea(ctx, state, curve, color)
     if (curve.strict) ctx.setLineDash([6, 5])
     // Subtle glow: same-hue shadow, low blur so thin curves stay crisp.
     ctx.strokeStyle = color

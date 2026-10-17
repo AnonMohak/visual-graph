@@ -49,6 +49,10 @@ Tips:
 - Implicit curves: `x^2 + y^2 = 1`, `x = 3`, `y = x*y + 1`.
 - Inequalities shade a region: `y < sin(x)`, `x^2 + y^2 <= 4`. A strict
   inequality (`<`, `>`) draws a dashed boundary.
+- Derivatives: `d/dx(x^3)`, or `f'(x)` for a function you defined.
+- Integrals: `integral(t^2, 0, x)` (the integrand uses t, or x when t is
+  absent). With constant bounds, `integral(x^2, 0, 3)` draws the curve,
+  shades the area under it, and shows the value.
 - Piecewise: `x < 0 ? -x : x^2` or `piecewise(x < 0, -x, x^2)`.
 - Invalid input shows an inline error and moves the cursor to the problem
   spot; nothing is added until it parses.
@@ -78,7 +82,7 @@ it fills the input so you can preview it, then press Enter to add it.
 ### Supported functions
 
 `sin cos tan cot sec csc asin acos atan sinh cosh tanh exp log log2 log10
-sqrt cbrt abs sign round floor ceil min max pow mod piecewise`, plus `pi`, `e`, `x`
+sqrt cbrt abs sign round floor ceil min max pow mod piecewise integral`, plus `pi`, `e`, `x`
 and operators `+ - * / ^ ( )`.
 
 ## Working with curves

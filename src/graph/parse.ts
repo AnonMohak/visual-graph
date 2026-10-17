@@ -1,6 +1,6 @@
 import { complex as mathComplex, parse as mathParse, type Complex } from 'mathjs'
 import { complexScopeExtras, resultToC, resultToComplex } from './complex'
-import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, EvaluatePointFn, EvaluateXYFn, Plane, Relation } from './types'
+import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, EvaluatePointFn, EvaluateXYFn, Plane, Relation, AreaInfo } from './types'
 
 /** User definitions visible to an expression: constants and functions by name. */
 export type Env = Record<string, unknown>
@@ -28,6 +28,7 @@ export interface ParseSuccess {
   evaluateXY?: EvaluateXYFn
   relation?: Relation
   tRange?: [number, number]
+  area?: AreaInfo
   kind: EquationKind
   component: ComplexComponent
   sigma: number
@@ -88,6 +89,7 @@ const KNOWN_SYMBOLS = [
   'arg',
   'conj',
   'piecewise',
+  'integral',
 ]
 
 const VARIABLE_NAMES = new Set(['pi', 'e', 'x', 'i', 's', 'z', 't', 'theta'])
@@ -419,6 +421,135 @@ function toTexSafe(expr: string, fallback: string): string {
   }
 }
 
+let helperSeq = 0
+
+function matchParen(expr: string, open: number): number {
+  let depth = 0
+  for (let k = open; k < expr.length; k++) {
+    if (expr[k] === '(') depth++
+    else if (expr[k] === ')') {
+      depth--
+      if (depth === 0) return k
+    }
+  }
+  return -1
+}
+
+function splitArgs(text: string): number[] {
+  const commas: number[] = []
+  let depth = 0
+  for (let k = 0; k < text.length; k++) {
+    const ch = text[k]
+    if (ch === '(' || ch === '[') depth++
+    else if (ch === ')' || ch === ']') depth--
+    else if (ch === ',' && depth === 0) commas.push(k)
+  }
+  return commas
+}
+
+/** Composite Simpson's rule with n (even) intervals. */
+export function simpson(f: (x: number) => number, a: number, b: number, n = 256): number {
+  if (a === b) return 0
+  const h = (b - a) / n
+  let sum = f(a) + f(b)
+  for (let k = 1; k < n; k++) sum += (k % 2 ? 4 : 2) * f(a + k * h)
+  return (sum * h) / 3
+}
+
+/** Central difference with a step scaled to the magnitude of x. */
+export function numericDerivative(f: (x: number) => number, x: number): number {
+  const h = 1e-5 * Math.max(1, Math.abs(x))
+  return (f(x + h) - f(x - h)) / (2 * h)
+}
+
+function toNumber(value: unknown): number {
+  return typeof value === 'number' ? value : NaN
+}
+
+interface Expanded extends Normalized {
+  helpers: Env
+}
+
+const NOT_IDENT_BEFORE = (expr: string, k: number) => k === 0 || !/[a-zA-Z0-9_]/.test(expr[k - 1])
+
+/**
+ * Rewrite calculus helpers into calls to generated scope functions:
+ * `d/dx(E)` -> `__dN(x)`, `f'(` -> `__dN(`, `integral(E, a, b)` -> `__iN(a, b)`.
+ * The integrand variable is t when E uses t, otherwise x.
+ */
+function expandCalculus(src: Normalized, env: Env): Expanded {
+  const helpers: Env = {}
+  let { expr, map } = src
+  const base = () => ({ pi: Math.PI, e: Math.E, ...complexScopeExtras(), piecewise, ...env, ...helpers })
+  const replace = (start: number, end: number, text: string) => {
+    expr = expr.slice(0, start) + text + expr.slice(end)
+    map = [...map.slice(0, start), ...new Array<number>(text.length).fill(map[start] ?? 0), ...map.slice(end)]
+  }
+  const compileInner = (start: number, end: number) => {
+    const inner = expandCalculus({ expr: expr.slice(start, end), map: map.slice(start, end) }, env)
+    if (!inner.expr) throw new Error('Value expected')
+    const compiled = mathParse(inner.expr).compile()
+    return (vars: Record<string, number>) => toNumber(compiled.evaluate({ ...base(), ...inner.helpers, ...vars }))
+  }
+  let k = 0
+  while (k < expr.length) {
+    const rest = expr.slice(k)
+    const deriv = /^d\/dx\(/.exec(rest)
+    const prime = /^([a-zA-Z][a-zA-Z0-9_]*)'\(/.exec(rest)
+    const integral = /^integral\(/.exec(rest)
+    if (deriv && NOT_IDENT_BEFORE(expr, k)) {
+      const open = k + deriv[0].length - 1
+      const close = matchParen(expr, open)
+      if (close < 0) throw new Error('Parenthesis ) expected')
+      const inner = compileInner(open + 1, close)
+      const name = `__d${++helperSeq}`
+      helpers[name] = (x: unknown) => numericDerivative((v) => inner({ x: v }), toNumber(x))
+      replace(k, close + 1, `${name}(x)`)
+      k += name.length + 3
+      continue
+    }
+    if (prime && typeof env[prime[1]] === 'function' && NOT_IDENT_BEFORE(expr, k)) {
+      const fn = env[prime[1]] as (v: number) => unknown
+      const name = `__d${++helperSeq}`
+      helpers[name] = (x: unknown) => numericDerivative((v) => toNumber(fn(v)), toNumber(x))
+      replace(k, k + prime[1].length + 1, name)
+      k += name.length
+      continue
+    }
+    if (integral && NOT_IDENT_BEFORE(expr, k)) {
+      const open = k + integral[0].length - 1
+      const close = matchParen(expr, open)
+      if (close < 0) throw new Error('Parenthesis ) expected')
+      const body = expr.slice(open + 1, close)
+      const commas = splitArgs(body)
+      if (commas.length !== 2) throw new Error('integral needs (expression, a, b)')
+      const variable = /\bt\b/.test(body.slice(0, commas[0])) ? 't' : 'x'
+      const inner = compileInner(open + 1, open + 1 + commas[0])
+      const name = `__i${++helperSeq}`
+      helpers[name] = (a: unknown, b: unknown) =>
+        simpson((v) => inner({ [variable]: v }), toNumber(a), toNumber(b))
+      replace(k, open + 1 + commas[0] + 1, `${name}(`)
+      k += name.length + 1
+      continue
+    }
+    k++
+  }
+  return { expr, map, helpers }
+}
+
+/** `integral(E, a, b)` filling the whole expression with constant bounds: a shaded area. */
+function areaOf(expr: string): { integrand: string; a: string; b: string } | null {
+  if (!expr.startsWith('integral(') || matchParen(expr, 8) !== expr.length - 1) return null
+  const body = expr.slice(9, -1)
+  const commas = splitArgs(body)
+  if (commas.length !== 2) return null
+  const a = body.slice(commas[0] + 1, commas[1])
+  const b = body.slice(commas[1] + 1)
+  // Variable bounds (`2x` included) make it a function of x, not a fixed area.
+  if (/(^|[^a-zA-Z_])[xty]($|[^a-zA-Z0-9_])/.test(`${a},${b}`)) return null
+  return { integrand: body.slice(0, commas[0]), a, b }
+}
+
 /** Index of the comma splitting `(a, b)` at the top level, or -1. */
 function tupleComma(expr: string): number {
   if (!expr.startsWith('(') || !expr.endsWith(')')) return -1
@@ -460,7 +591,8 @@ function parseCurve(raw: string, src: Normalized, env: Env): ParseResult {
   try {
     const compiled = parts.map((part) => {
       if (!part.expr) throw new Error('Value expected')
-      const implicit = insertImplicit(part, env, [variable])
+      const implicit = expandCalculus(insertImplicit(part, env, [variable]), env)
+      env = { ...env, ...implicit.helpers }
       const balance = balanceCheck(implicit.expr, raw, implicit.map)
       if (balance) throw balance
       return { node: mathParse(implicit.expr), map: implicit.map }
@@ -559,7 +691,8 @@ function parseImplicit(raw: string, src: Normalized, relation: RelationAt, env: 
   const extras = { ...complexScopeExtras(), piecewise }
   try {
     const nodes = sides.map((side) => {
-      const implicit = insertImplicit(side, env, ['y'])
+      const implicit = expandCalculus(insertImplicit(side, env, ['y']), env)
+      env = { ...env, ...implicit.helpers }
       const balance = balanceCheck(implicit.expr, raw, implicit.map)
       if (balance) throw balance
       return mathParse(implicit.expr)
@@ -605,6 +738,45 @@ function parseImplicit(raw: string, src: Normalized, relation: RelationAt, env: 
   } catch (err) {
     if (err && typeof err === 'object' && 'ok' in err) return err as ParseFailure
     return friendlyError(err, raw, src.map)
+  }
+}
+
+/** Shaded area under E(x) from a to b; the curve is E itself. */
+function parseArea(raw: string, area: { integrand: string; a: string; b: string }, env: Env, map: number[]): ParseResult {
+  try {
+    const inner = expandCalculus({ expr: area.integrand, map: map.slice(9) }, env)
+    const scope = { pi: Math.PI, e: Math.E, ...complexScopeExtras(), piecewise, ...env, ...inner.helpers }
+    const compiled = mathParse(inner.expr).compile()
+    const a = toNumber(mathParse(area.a).compile().evaluate(scope))
+    const b = toNumber(mathParse(area.b).compile().evaluate(scope))
+    if (!Number.isFinite(a) || !Number.isFinite(b)) {
+      return { ok: false, raw, message: 'integral bounds must be numbers' }
+    }
+    const evaluate: EvaluateFn = (x) => {
+      try {
+        const v = compiled.evaluate({ ...scope, x })
+        return finiteReal(v) ? v : null
+      } catch {
+        return null
+      }
+    }
+    const value = simpson((x) => evaluate(x) ?? NaN, a, b)
+    if (!Number.isFinite(value)) return { ok: false, raw, message: 'the integral does not converge' }
+    return {
+      ok: true,
+      plot: true,
+      raw,
+      expr: area.integrand,
+      latex: `\\int_{${toTexSafe(area.a, area.a)}}^{${toTexSafe(area.b, area.b)}} ${toTexSafe(inner.expr, inner.expr)}\\,dx`,
+      evaluate,
+      area: { a: Math.min(a, b), b: Math.max(a, b), value },
+      kind: 'real',
+      component: 're',
+      sigma: 0.5,
+      suggestedPlane: 'xy',
+    }
+  } catch (err) {
+    return friendlyError(err, raw, map)
   }
 }
 
@@ -659,8 +831,19 @@ function parseInner(input: string, env: Env): ParseResult {
     return { ok: false, raw, message: 'empty expression' }
   }
   const implicit = insertImplicit(bodySrc, env, head?.param ? [head.param] : [])
-  const map = implicit.map
-  let expr = implicit.expr
+  if (!head) {
+    const area = areaOf(implicit.expr)
+    if (area) return parseArea(raw, area, env, implicit.map)
+  }
+  let calc: Expanded
+  try {
+    calc = expandCalculus(implicit, env)
+  } catch (err) {
+    return friendlyError(err, raw, implicit.map)
+  }
+  env = { ...env, ...calc.helpers }
+  const map = calc.map
+  let expr = calc.expr
   // f(u) = ... : the parameter becomes the internal x (1 char -> 1 char).
   if (head?.type === 'fn' && head.param !== 'x') {
     expr = expr.replace(new RegExp(`\\b${head.param}\\b`, 'g'), 'x')

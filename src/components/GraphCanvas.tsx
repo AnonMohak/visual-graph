@@ -507,6 +507,7 @@ export function GraphCanvas({
           visible: equation.visible,
           samples: entry.samples,
           evaluate,
+          area: equation.area,
         }
       }
       // complex-slice / complex-param rendered as 1D slice at fixed sigma.
