@@ -916,32 +916,14 @@ function parseInner(input: string, env: Env): ParseResult {
       return compiled.evaluate(scope)
     }
 
-    // Probe 1: real x=1.5 (fallback x=7 for domain errors like log).
-    let realOk = false
-    try {
-      const v = probeReal(1.5)
-      if (finiteReal(v)) realOk = true
-      else {
-        // Complex-valued at real x counts as complex, not failure.
-        const c = resultToC(v)
-        if (c) realOk = false
-        else {
-          try {
-            const v2 = probeReal(7)
-            if (finiteReal(v2)) realOk = true
-          } catch {
-            // fall through to complex probe
-          }
-        }
-      }
-    } catch {
+    // Probe 1: real at several x so domain limits (log, asin) do not hide a real curve.
+    const realOk = [1.5, 7, 0.5, -0.5, -7].some((x) => {
       try {
-        const v2 = probeReal(7)
-        if (finiteReal(v2)) realOk = true
+        return finiteReal(probeReal(x))
       } catch {
-        realOk = false
+        return false
       }
-    }
+    })
 
     // Probe 2: complex s = 0.5 + 14i.
     let complexOk = false

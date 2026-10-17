@@ -43,3 +43,11 @@ describe('parseEquation', () => {
     expect(r.ok && r.kind).toBe('complex-param')
   })
 })
+
+describe('real probes', () => {
+  it('keeps functions with a narrow domain real', () => {
+    for (const raw of ['asin(x)', 'acos(x)', 'sqrt(-x)']) {
+      expect(parseEquation(raw)).toMatchObject({ ok: true, kind: 'real' })
+    }
+  })
+})
