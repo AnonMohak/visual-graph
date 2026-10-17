@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 export type GraphMode = 'static' | 'animated'
 
@@ -9,6 +10,7 @@ interface AnimatedModeToggleProps {
 }
 
 export function AnimatedModeToggle({ mode, onChange, className }: AnimatedModeToggleProps) {
+  const t = useT()
   return (
     <div
       role="tablist"
@@ -31,7 +33,7 @@ export function AnimatedModeToggle({ mode, onChange, className }: AnimatedModeTo
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
-          {option}
+          {t(option)}
         </button>
       ))}
     </div>

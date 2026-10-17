@@ -1,7 +1,9 @@
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { AngleUnit, Palette, ViewSettings } from '@/graph/view'
+import { getLang, LANGS, setLang, type Lang } from '@/i18n'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 interface ViewPanelProps {
   view: ViewSettings
@@ -58,6 +60,8 @@ function Segmented<T extends string>({
 
 /** Grid, axes, labels, scales, angle unit and palette settings. */
 export function ViewPanel({ view, onChange, onClose, className }: ViewPanelProps) {
+  const t = useT()
+  const lang = getLang()
   return (
     <div
       className={cn(
@@ -66,26 +70,26 @@ export function ViewPanel({ view, onChange, onClose, className }: ViewPanelProps
       )}
     >
       <div className="flex items-center justify-between text-[11px]">
-        <span>view</span>
+        <span>{t('view')}</span>
         <Button variant="ghost" size="icon-xs" aria-label="close view settings" onClick={onClose}>
           <XIcon />
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-1">
-        <Check label="grid" checked={view.grid} onChange={(grid) => onChange({ grid })} />
-        <Check label="axes" checked={view.axes} onChange={(axes) => onChange({ axes })} />
-        <Check label="log x" checked={view.logX} onChange={(logX) => onChange({ logX })} />
-        <Check label="log y" checked={view.logY} onChange={(logY) => onChange({ logY })} />
-        <Check label="equal aspect" checked={view.equalAspect} onChange={(equalAspect) => onChange({ equalAspect })} />
+        <Check label={t('grid')} checked={view.grid} onChange={(grid) => onChange({ grid })} />
+        <Check label={t('axes')} checked={view.axes} onChange={(axes) => onChange({ axes })} />
+        <Check label={t('log x')} checked={view.logX} onChange={(logX) => onChange({ logX })} />
+        <Check label={t('log y')} checked={view.logY} onChange={(logY) => onChange({ logY })} />
+        <Check label={t('equal aspect')} checked={view.equalAspect} onChange={(equalAspect) => onChange({ equalAspect })} />
       </div>
       {!view.equalAspect && (
         <span className="text-[10px]">Shift+wheel zooms y, Alt+wheel zooms x, f fits y.</span>
       )}
       <label className="flex items-center gap-2">
-        grid step
+        {t('grid step')}
         <input
           aria-label="grid step"
-          placeholder="auto"
+          placeholder={t('auto')}
           defaultValue={view.gridStep ?? ''}
           onChange={(event) => {
             const step = Number(event.target.value)
@@ -96,16 +100,16 @@ export function ViewPanel({ view, onChange, onClose, className }: ViewPanelProps
       </label>
       <div className="grid grid-cols-2 gap-1">
         <label>
-          x label
+          {t('x label')}
           <input aria-label="x axis label" value={view.xLabel} onChange={(e) => onChange({ xLabel: e.target.value })} className={fieldClass} />
         </label>
         <label>
-          y label
+          {t('y label')}
           <input aria-label="y axis label" value={view.yLabel} onChange={(e) => onChange({ yLabel: e.target.value })} className={fieldClass} />
         </label>
       </div>
       <Segmented<AngleUnit>
-        label="angles"
+        label={t('angles')}
         value={view.angle}
         options={[
           { value: 'rad', label: 'rad' },
@@ -114,7 +118,7 @@ export function ViewPanel({ view, onChange, onClose, className }: ViewPanelProps
         onChange={(angle) => onChange({ angle })}
       />
       <Segmented<Palette>
-        label="palette"
+        label={t('palette')}
         value={view.palette}
         options={[
           { value: 'default', label: 'default' },
@@ -123,6 +127,7 @@ export function ViewPanel({ view, onChange, onClose, className }: ViewPanelProps
         ]}
         onChange={(palette) => onChange({ palette })}
       />
+      <Segmented<Lang> label={t('language')} value={lang} options={LANGS} onChange={setLang} />
     </div>
   )
 }

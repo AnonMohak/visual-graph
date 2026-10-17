@@ -6,6 +6,7 @@ import { valueTable } from '@/graph/analysis'
 import type { Equation } from '@/graph/types'
 import { formatNumber } from '@/graph/viewport'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 interface ValueTableProps {
   equations: Equation[]
@@ -17,6 +18,7 @@ const fieldClass = 'h-6 w-full rounded border bg-background px-1 font-mono text-
 
 /** Table of x and f(x) for one curve over a chosen range and step. */
 export function ValueTable({ equations, onClose, className }: ValueTableProps) {
+  const t = useT()
   const curves = equations.filter((equation) => equation.kind === 'real')
   const [pickedId, setPickedId] = useState<string | null>(null)
   const [start, setStart] = useState('-5')
@@ -33,7 +35,7 @@ export function ValueTable({ equations, onClose, className }: ValueTableProps) {
       )}
     >
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>table of values</span>
+        <span>{t('table of values')}</span>
         <Button variant="ghost" size="icon-xs" aria-label="close table" onClick={onClose}>
           <XIcon />
         </Button>
@@ -56,15 +58,15 @@ export function ValueTable({ equations, onClose, className }: ValueTableProps) {
           </select>
           <div className="grid grid-cols-3 gap-1 text-[10px] text-muted-foreground">
             <label>
-              from
+              {t('from')}
               <input aria-label="from" value={start} onChange={(e) => setStart(e.target.value)} className={fieldClass} />
             </label>
             <label>
-              to
+              {t('to')}
               <input aria-label="to" value={end} onChange={(e) => setEnd(e.target.value)} className={fieldClass} />
             </label>
             <label>
-              step
+              {t('step')}
               <input aria-label="step" value={step} onChange={(e) => setStep(e.target.value)} className={fieldClass} />
             </label>
           </div>

@@ -18,6 +18,7 @@ import { type Env, type ParseFailure } from '@/graph/parse'
 import { parseWithSliders } from '@/graph/sliders'
 import { isComplexKind, type ComplexComponent, type Plane } from '@/graph/types'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 const SAMPLES: { label: string; plane: Plane }[] = [
   { label: 'sin(x)/x', plane: 'xy' },
@@ -105,6 +106,7 @@ export function CommandBar({
   onEmbed,
   onLibrary,
 }: CommandBarProps) {
+  const t = useT()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -450,24 +452,24 @@ export function CommandBar({
           <div className="flex min-h-6 min-w-0 flex-1 items-center overflow-hidden text-xs">{statusRow}</div>
           <div className="hidden shrink-0 items-center gap-2 text-[11px] text-muted-foreground md:flex">
             <Kbd className="font-mono">/</Kbd>
-            focus
+            {t('focus')}
             <Kbd className="font-mono">⏎</Kbd>
-            add
+            {t('add')}
             <Kbd className="font-mono">0</Kbd>
-            reset
+            {t('reset')}
             <Kbd className="font-mono">f</Kbd>
-            fit
+            {t('fit')}
             <Kbd className="font-mono">?</Kbd>
-            help
+            {t('help')}
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-              samples
+              {t('samples')}
               <ChevronDownIcon data-icon="inline-end" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuGroup>
-                <DropdownMenuLabel>samples</DropdownMenuLabel>
+                <DropdownMenuLabel>{t('samples')}</DropdownMenuLabel>
                 {SAMPLES.map((sample) => (
                   <DropdownMenuItem
                     key={`${sample.plane}:${sample.label}`}
@@ -483,31 +485,31 @@ export function CommandBar({
           {(onExportImage || onLibrary) && (
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
-                file
+                {t('file')}
                 <ChevronDownIcon data-icon="inline-end" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>graph</DropdownMenuLabel>
-                  {onLibrary && <DropdownMenuItem onClick={onLibrary}>saved graphs…</DropdownMenuItem>}
+                  <DropdownMenuLabel>{t('graph')}</DropdownMenuLabel>
+                  {onLibrary && <DropdownMenuItem onClick={onLibrary}>{t('saved graphs…')}</DropdownMenuItem>}
                   {onExportJson && (
                     <DropdownMenuItem
                       onClick={() => {
                         if (!onExportJson()) setNotice('error', 'nothing to export yet — add an equation first')
                       }}
                     >
-                      export JSON
+                      {t('export JSON')}
                     </DropdownMenuItem>
                   )}
                   {onImportJson && (
-                    <DropdownMenuItem onClick={() => fileRef.current?.click()}>import JSON…</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => fileRef.current?.click()}>{t('import JSON…')}</DropdownMenuItem>
                   )}
                 </DropdownMenuGroup>
                 <DropdownMenuGroup>
-                  <DropdownMenuLabel>image</DropdownMenuLabel>
-                  {onExportImage && <DropdownMenuItem onClick={() => onExportImage('png')}>export PNG</DropdownMenuItem>}
-                  {onExportImage && <DropdownMenuItem onClick={() => onExportImage('svg')}>export SVG</DropdownMenuItem>}
-                  {onEmbed && <DropdownMenuItem onClick={handleEmbed}>copy embed code</DropdownMenuItem>}
+                  <DropdownMenuLabel>{t('image')}</DropdownMenuLabel>
+                  {onExportImage && <DropdownMenuItem onClick={() => onExportImage('png')}>{t('export PNG')}</DropdownMenuItem>}
+                  {onExportImage && <DropdownMenuItem onClick={() => onExportImage('svg')}>{t('export SVG')}</DropdownMenuItem>}
+                  {onEmbed && <DropdownMenuItem onClick={handleEmbed}>{t('copy embed code')}</DropdownMenuItem>}
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -528,12 +530,12 @@ export function CommandBar({
           )}
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2Icon data-icon="inline-start" />
-            share
+            {t('share')}
           </Button>
           {copied && (
             <Badge variant="secondary" className="text-graph-accent">
               <CheckIcon data-icon="inline-start" />
-              copied
+              {t('copied')}
             </Badge>
           )}
         </div>

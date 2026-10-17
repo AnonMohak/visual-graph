@@ -199,6 +199,10 @@ are saved in the browser.
 - **angles** switches trig functions between radians and degrees (xy plane).
 - **palette**: default, high contrast, or colorblind-safe (Okabe-Ito).
 
+- **language**: English, Spanish (ES), or German (DE). The first visit
+  uses the browser language. Buttons, panels and toolbars are translated;
+  math syntax and parse error messages stay in English.
+
 The **paper** and **neon** buttons switch between a light and a dark theme.
 
 ## Navigating the canvas
@@ -257,7 +261,8 @@ src/
   App.tsx            # app shell, equation state, share/load logic
   components/        # canvas, legend, command bar, modals, UI
   graph/             # parsing, evaluation, viewport, sharing
-  lib/               # helpers (utils, toasts)
+  lib/               # helpers (utils, chart colors)
+  i18n.ts            # UI translations (en, es, de)
 public/              # favicon, icons, logo, PWA manifest, service worker
 index.html           # app entry
 vite.config.ts       # Vite + Tailwind + `@` alias config

@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { deleteSaved, listSaved, saveGraph, type SavedGraph } from '@/graph/library'
 import type { ShareState } from '@/graph/share'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 interface LibraryPanelProps {
   /** Current graph, or null when there is nothing to save. */
@@ -16,6 +17,7 @@ interface LibraryPanelProps {
 
 /** Named graphs saved in this browser: save the current one, load or delete others. */
 export function LibraryPanel({ getState, onLoad, onClose, className }: LibraryPanelProps) {
+  const t = useT()
   const [items, setItems] = useState<SavedGraph[]>(listSaved)
   const [name, setName] = useState('')
   const [message, setMessage] = useState<string | null>(null)
@@ -43,7 +45,7 @@ export function LibraryPanel({ getState, onLoad, onClose, className }: LibraryPa
       )}
     >
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-        <span>saved graphs</span>
+        <span>{t('saved graphs')}</span>
         <Button variant="ghost" size="icon-xs" aria-label="close saved graphs" onClick={onClose}>
           <XIcon />
         </Button>
@@ -57,18 +59,18 @@ export function LibraryPanel({ getState, onLoad, onClose, className }: LibraryPa
       >
         <input
           aria-label="graph name"
-          placeholder="name"
+          placeholder={t('name')}
           value={name}
           onChange={(event) => setName(event.target.value)}
           className="h-7 min-w-0 flex-1 rounded border bg-background px-1.5 font-mono text-xs"
         />
         <Button type="submit" variant="outline" size="sm">
-          save
+          {t('save')}
         </Button>
       </form>
       {message && <span className="text-muted-foreground">{message}</span>}
       {items.length === 0 ? (
-        <span className="text-muted-foreground">no saved graphs yet</span>
+        <span className="text-muted-foreground">{t('no saved graphs yet')}</span>
       ) : (
         <ScrollArea className="max-h-[35vh]">
           <ul className="flex flex-col gap-0.5">

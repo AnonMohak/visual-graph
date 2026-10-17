@@ -5,6 +5,7 @@ import { fitToRaw, parseCsv, pointsToRaw, polyFit } from '@/graph/regression'
 import type { Equation } from '@/graph/types'
 import { formatNumber } from '@/graph/viewport'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 interface DataPanelProps {
   equations: Equation[]
@@ -26,6 +27,7 @@ const fieldClass = 'h-7 w-full rounded border bg-background px-1 font-mono text-
 
 /** Paste CSV to add a scatter plot, then fit a regression curve to it. */
 export function DataPanel({ equations, onAdd, onClose, className }: DataPanelProps) {
+  const t = useT()
   const [text, setText] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const pointSets = equations.filter((equation) => equation.points?.length)
@@ -63,7 +65,7 @@ export function DataPanel({ equations, onAdd, onClose, className }: DataPanelPro
       )}
     >
       <div className="flex items-center justify-between text-[11px]">
-        <span>data</span>
+        <span>{t('data')}</span>
         <Button variant="ghost" size="icon-xs" aria-label="close data" onClick={onClose}>
           <XIcon />
         </Button>
@@ -77,11 +79,11 @@ export function DataPanel({ equations, onAdd, onClose, className }: DataPanelPro
         className="resize-y rounded border bg-background p-1.5 font-mono text-xs text-foreground"
       />
       <Button variant="outline" size="sm" onClick={addPoints}>
-        add points
+        {t('add points')}
       </Button>
       {pointSets.length > 0 && (
         <div className="flex flex-col gap-1.5 border-t pt-2">
-          <span className="text-[11px]">regression</span>
+          <span className="text-[11px]">{t('regression')}</span>
           <select
             aria-label="point set"
             value={picked?.id}
@@ -108,7 +110,7 @@ export function DataPanel({ equations, onAdd, onClose, className }: DataPanelPro
               ))}
             </select>
             <Button variant="outline" size="sm" onClick={addFit}>
-              add fit
+              {t('add fit')}
             </Button>
           </div>
         </div>

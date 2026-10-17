@@ -1,4 +1,5 @@
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 export interface ToggleOption {
   key: string
@@ -16,6 +17,7 @@ interface ToggleBarProps {
 
 /** Row of independent on/off buttons in the floating-pill style. */
 export function ToggleBar({ label, options, onToggle, className }: ToggleBarProps) {
+  const t = useT()
   return (
     <div
       role="toolbar"
@@ -39,7 +41,7 @@ export function ToggleBar({ label, options, onToggle, className }: ToggleBarProp
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
-          {option.label}
+          {t(option.label)}
         </button>
       ))}
     </div>

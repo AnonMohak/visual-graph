@@ -2,6 +2,7 @@ import { CircleIcon, PauseIcon, PlayIcon, PlusIcon, RepeatIcon, RotateCcwIcon, S
 import { Button } from '@/components/ui/button'
 import { SPEEDS } from '@/graph/animated'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 interface AnimatedControlsProps {
   playing: boolean
@@ -76,6 +77,7 @@ export function AnimatedControls({
   unlocked = false,
   className,
 }: AnimatedControlsProps) {
+  const t = useT()
   return (
     <div className={cn('absolute inset-x-0 bottom-0 z-20 p-3', className)}>
       <div className="flex flex-col gap-2 rounded-xl border bg-background/85 p-2 shadow-lg shadow-black/30 backdrop-blur-md">
@@ -129,7 +131,7 @@ export function AnimatedControls({
             title="sweep slider constants with the pen"
             onClick={() => onSyncChange(!syncSliders)}
           >
-            sync sliders
+            {t('sync sliders')}
           </Button>
           {onRecord && (
             <Button
@@ -139,7 +141,7 @@ export function AnimatedControls({
               onClick={onRecord}
             >
               {recording ? <SquareIcon data-icon="inline-start" /> : <CircleIcon data-icon="inline-start" />}
-              {recording ? 'stop' : 'record'}
+              {recording ? t('stop') : t('record')}
             </Button>
           )}
           <Button variant="outline" size="icon-sm" aria-label="add animated equation" onClick={onAddClick}>

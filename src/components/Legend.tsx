@@ -11,6 +11,7 @@ import { useCurveStatus } from '@/graph/store'
 import { isComplexKind, type ComplexComponent, type Equation, type LineDash } from '@/graph/types'
 import { CHART_CLASSES, swatchClass, swatchStyle } from '@/lib/chart'
 import { cn } from '@/lib/utils'
+import { useT } from '@/i18n'
 
 export type SpecPatch = Partial<Omit<EquationSpec, 'id'>>
 
@@ -49,6 +50,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
 }
 
 function StylePanel({ equation, onUpdate }: { equation: Equation; onUpdate: (patch: SpecPatch) => void }) {
+  const t = useT()
   return (
     <div className="flex flex-col gap-1.5 py-1 pl-[1.1rem] text-[11px] text-muted-foreground">
       <div className="flex items-center gap-1">
@@ -91,10 +93,10 @@ function StylePanel({ equation, onUpdate }: { equation: Equation; onUpdate: (pat
         ))}
       </div>
       <label className="flex items-center gap-1.5">
-        folder
+        {t('folder')}
         <input
           aria-label="folder"
-          placeholder="none"
+          placeholder={t('none')}
           defaultValue={equation.group ?? ''}
           onBlur={(event) => onUpdate({ group: event.target.value.trim().slice(0, 40) || undefined })}
           onKeyDown={(event) => {
@@ -104,7 +106,7 @@ function StylePanel({ equation, onUpdate }: { equation: Equation; onUpdate: (pat
         />
       </label>
       <label className="flex items-center gap-1.5">
-        width
+        {t('width')}
         <input
           type="range"
           min={1}
@@ -133,6 +135,7 @@ export function Legend({
   sigma = 0.5,
   component = 're',
 }: LegendProps) {
+  const t = useT()
   const status = useCurveStatus()
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
   const [styling, setStyling] = useState<string | null>(null)
@@ -187,7 +190,7 @@ export function Legend({
           onClick={() => setSheetOpen((prev) => !prev)}
         >
           <ChevronDownIcon className={cn('size-3 transition-transform', !sheetOpen && '-rotate-90')} />
-          curves
+          {t('curves')}
           <span className="font-mono tabular-nums">{equations.length}</span>
         </button>
         {onSetVisibility && (
@@ -196,7 +199,7 @@ export function Legend({
             className="rounded px-1.5 py-0.5 hover:bg-muted max-sm:min-h-8"
             onClick={() => onSetVisibility(!allVisible)}
           >
-            {allVisible ? 'hide all' : 'show all'}
+            {allVisible ? t('hide all') : t('show all')}
           </button>
         )}
       </div>
@@ -224,7 +227,7 @@ export function Legend({
                     </button>
                     {onSetVisibility && (
                       <IconButton
-                        label={groupVisible ? 'hide folder' : 'show folder'}
+                        label={groupVisible ? t('hide folder') : t('show folder')}
                         onClick={() => onSetVisibility(!groupVisible, group.name)}
                       >
                         {groupVisible ? <EyeIcon data-icon="inline-start" /> : <EyeOffIcon data-icon="inline-start" />}
@@ -291,15 +294,15 @@ export function Legend({
                     </button>
                   )}
                   {onUpdate && equation.plot && (
-                    <IconButton label="style" onClick={() => setStyling((prev) => (prev === equation.id ? null : equation.id))}>
+                    <IconButton label={t('style')} onClick={() => setStyling((prev) => (prev === equation.id ? null : equation.id))}>
                       <PaletteIcon data-icon="inline-start" />
                     </IconButton>
                   )}
-                  <IconButton label={equation.visible ? 'hide' : 'show'} onClick={() => onToggle(equation.id)}>
+                  <IconButton label={equation.visible ? t('hide') : t('show')} onClick={() => onToggle(equation.id)}>
                     {equation.visible ? <EyeIcon data-icon="inline-start" /> : <EyeOffIcon data-icon="inline-start" />}
                   </IconButton>
                   {onDelete && (
-                    <IconButton label="delete" onClick={() => onDelete(equation.id)}>
+                    <IconButton label={t('delete')} onClick={() => onDelete(equation.id)}>
                       <XIcon data-icon="inline-start" />
                     </IconButton>
                   )}
@@ -331,7 +334,7 @@ export function Legend({
                 )}
                 {hasPoints === false && equation.visible && equation.plot && (
                   <span className="pl-[1.1rem] text-[11px] text-muted-foreground">
-                    no real points in view
+                    {t('no real points in view')}
                   </span>
                 )}
               </li>

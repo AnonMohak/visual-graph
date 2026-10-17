@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Kbd } from '@/components/ui/kbd'
+import { useT } from '@/i18n'
 
 interface HelpOverlayProps {
   onClose: () => void
@@ -40,9 +41,10 @@ const SYNTAX: [string, string][] = [
 ]
 
 function Table({ title, rows, keys }: { title: string; rows: [string, string][]; keys?: boolean }) {
+  const t = useT()
   return (
     <section className="flex flex-col gap-1">
-      <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-[11px] uppercase tracking-wide text-muted-foreground">{t(title)}</h3>
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
         {rows.map(([key, text]) => (
           <div key={key} className="contents">
@@ -57,6 +59,7 @@ function Table({ title, rows, keys }: { title: string; rows: [string, string][];
 
 /** Modal list of keyboard shortcuts, mouse gestures and input syntax. */
 export function HelpOverlay({ onClose }: HelpOverlayProps) {
+  const t = useT()
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -78,7 +81,7 @@ export function HelpOverlay({ onClose }: HelpOverlayProps) {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium">help</h2>
+          <h2 className="text-sm font-medium">{t('help')}</h2>
           <Button variant="ghost" size="icon-sm" aria-label="close help" onClick={onClose} autoFocus>
             <XIcon />
           </Button>
