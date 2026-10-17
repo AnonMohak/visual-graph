@@ -65,3 +65,13 @@ describe('sliders', async () => {
     expect(sliderOf('a = 2*pi')).toBeNull()
   })
 })
+
+describe('definition edge cases', () => {
+  it('rejects a constant that uses x', () => {
+    expect(parseEquation('k = 2x').ok).toBe(false)
+  })
+  it('renames a function parameter', () => {
+    const r = parseEquation('g(u) = u^2 + 1')
+    expect(r.ok && r.evaluate(2)).toBe(5)
+  })
+})

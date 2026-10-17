@@ -4,7 +4,12 @@ export type EvaluateFn = (x: number) => number | null
 export type EvaluateComplexFn = (s: Complex) => Complex | null
 
 export type Plane = 'xy' | 'st' | 'reim'
-export type EquationKind = 'real' | 'complex-slice' | 'complex-param' | 'parametric' | 'polar'
+export type EquationKind = 'real' | 'complex-slice' | 'complex-param' | 'parametric' | 'polar' | 'implicit'
+
+export type Relation = '=' | '<' | '<=' | '>' | '>='
+
+/** F(x, y) for implicit curves: the relation compares F with 0. */
+export type EvaluateXYFn = (x: number, y: number) => number | null
 
 /** Parametric/polar point at parameter t (polar: t is θ). */
 export type EvaluatePointFn = (t: number) => [number, number] | null
@@ -17,6 +22,8 @@ export interface Equation {
   evaluate: EvaluateFn
   evaluateComplex?: EvaluateComplexFn
   evaluatePoint?: EvaluatePointFn
+  evaluateXY?: EvaluateXYFn
+  relation?: Relation
   /** Parameter range for parametric/polar curves. */
   tRange?: [number, number]
   kind: EquationKind
@@ -45,6 +52,10 @@ export interface Segment {
 export interface CurveSamples {
   segments: Segment[]
   hasPoints: boolean
+  /** Shaded cells for inequalities: [x0, y0, ...] world lower-left corners. */
+  region?: Float64Array
+  /** Cell size in world units for `region`. */
+  cell?: number
 }
 
 export interface Viewport {

@@ -8,6 +8,8 @@ export interface RenderCurve {
   visible: boolean
   samples: CurveSamples
   evaluate: EvaluateFn
+  /** Strict inequality: draw the boundary dashed. */
+  strict?: boolean
 }
 
 export interface AxisLabels {
@@ -155,6 +157,21 @@ function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
     if (!curve.visible) continue
     const color = colors.charts[curve.colorIndex % colors.charts.length]
     ctx.save()
+    const region = curve.samples.region
+    const cell = curve.samples.cell
+    if (region && cell) {
+      // One path for all shaded cells; +0.5px overlap hides seams between cells.
+      const size = cell * vp.scale + 0.5
+      ctx.fillStyle = color
+      ctx.globalAlpha = 0.18
+      ctx.beginPath()
+      for (let k = 0; k < region.length; k += 2) {
+        ctx.rect(worldToScreenX(vp, region[k]), worldToScreenY(vp, region[k + 1] + cell), size, size)
+      }
+      ctx.fill()
+      ctx.globalAlpha = 1
+    }
+    if (curve.strict) ctx.setLineDash([6, 5])
     // Subtle glow: same-hue shadow, low blur so thin curves stay crisp.
     ctx.strokeStyle = color
     ctx.shadowColor = color

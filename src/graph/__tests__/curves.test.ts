@@ -30,3 +30,43 @@ describe('parametric and polar', () => {
     expect(s.segments).toHaveLength(1)
   })
 })
+
+describe('implicit curves', async () => {
+  const { sampleImplicit } = await import('../implicit')
+  const vp = { scale: 50, originX: 200, originY: 200 }
+
+  it('parses a circle and traces it', () => {
+    const r = parseEquation('x^2 + y^2 = 1')
+    expect(r.ok && r.kind).toBe('implicit')
+    if (!r.ok) return
+    expect(r.evaluateXY!(1, 0)).toBeCloseTo(0)
+    const s = sampleImplicit(r.evaluateXY!, '=', vp, 400, 400, 4)
+    expect(s.segments.length).toBeGreaterThan(20)
+    for (const seg of s.segments) expect(Math.hypot(seg.xs[0], seg.ys[0])).toBeCloseTo(1, 1)
+  })
+
+  it('shades an inequality region', () => {
+    const r = parseEquation('y < sin(x)')
+    expect(r.ok && r.relation).toBe('<')
+    if (!r.ok) return
+    const s = sampleImplicit(r.evaluateXY!, '<', vp, 400, 400, 8)
+    expect(s.region!.length).toBeGreaterThan(0)
+  })
+
+  it('treats x = 3 and y = x + y as implicit', () => {
+    expect(parseEquation('x = 3').ok).toBe(true)
+    const r = parseEquation('y = x*y + 1')
+    expect(r.ok && r.kind).toBe('implicit')
+  })
+
+  it('keeps ternaries and explicit y = forms', () => {
+    expect(parseEquation('x < 0 ? -x : x').ok && parseEquation('x < 0 ? -x : x')).toMatchObject({ kind: 'real' })
+    expect(parseEquation('y = x^2')).toMatchObject({ kind: 'real' })
+  })
+
+  it('adds sliders for implicit free symbols', async () => {
+    const { parseWithSliders } = await import('../sliders')
+    const r = parseWithSliders('x^2 + y^2 = a', {})
+    expect(r.ok && r.sliders).toEqual(['a = 1'])
+  })
+})

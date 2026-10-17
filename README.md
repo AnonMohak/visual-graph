@@ -36,7 +36,8 @@ npm run lint     # lint
 Tips:
 
 - The `y =` prefix is optional: `y = sin(x)/x` and `sin(x)/x` are the same.
-- One variable only: `x`. Constants `pi` and `e` are available.
+- Explicit curves use `x`; implicit curves and inequalities use `x` and `y`.
+  Constants `pi` and `e` are available.
 - Implicit multiplication works: `2x`, `2(x+1)`, `x sin(x)`, `2pi x`.
 - Define constants and functions, then reuse them: `a = 2`, `f(x) = a*x^2`,
   then `f(x+1)`. Definitions can appear in any order.
@@ -45,6 +46,9 @@ Tips:
   value; the loop button bounces it back and forth.
 - Parametric curves: `(cos(t), sin(t))` draws t from 0 to 2π.
 - Polar curves: `r = 1 + cos(θ)` (or `theta`) draws θ from 0 to 2π.
+- Implicit curves: `x^2 + y^2 = 1`, `x = 3`, `y = x*y + 1`.
+- Inequalities shade a region: `y < sin(x)`, `x^2 + y^2 <= 4`. A strict
+  inequality (`<`, `>`) draws a dashed boundary.
 - Piecewise: `x < 0 ? -x : x^2` or `piecewise(x < 0, -x, x^2)`.
 - Invalid input shows an inline error and moves the cursor to the problem
   spot; nothing is added until it parses.

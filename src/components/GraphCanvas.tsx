@@ -16,6 +16,7 @@ import {
 import { resolveGraphColors, type GraphColors } from '@/graph/color'
 import { setZetaCoarse } from '@/graph/complex'
 import { computeFieldImage } from '@/graph/field'
+import { sampleImplicit } from '@/graph/implicit'
 import { drawField, drawGraph, drawParametric, type RenderCurve } from '@/graph/render'
 import { sampleComplexSlice, sampleCurve, sampleParametric, samplePoints } from '@/graph/sampler'
 import { readoutStore, statusStore } from '@/graph/store'
@@ -416,6 +417,25 @@ export function GraphCanvas({
     const drawRange = animated ? { xMin: DRAW_X_MIN, xMax: DRAW_X_MAX } : bounds
     const list = equationsRef.current.map((equation) => {
       active.add(equation.id)
+      if (equation.evaluateXY && equation.relation) {
+        // Grid sampling depends on the whole view, so the key includes the origin.
+        const cellPx = spacing === COARSE_SPACING ? 8 : 4
+        const sig = `imp|${vp.scale}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${cellPx}|${equation.id}|${equation.rev}`
+        let entry = cache.get(equation.id)
+        if (!entry || entry.sig !== sig) {
+          entry = { sig, samples: sampleImplicit(equation.evaluateXY, equation.relation, vp, w, h, cellPx) }
+          cache.set(equation.id, entry)
+        }
+        status[equation.id] = entry.samples.hasPoints
+        return {
+          id: equation.id,
+          colorIndex: equation.colorToken,
+          visible: equation.visible,
+          samples: entry.samples,
+          evaluate: equation.evaluate,
+          strict: equation.relation === '<' || equation.relation === '>',
+        }
+      }
       if (equation.evaluatePoint) {
         const [tMin, tMax] = equation.tRange ?? [0, 2 * Math.PI]
         const sig = `pts|${Math.round(vp.scale * 10)}|${h}|${equation.id}|${equation.rev}`

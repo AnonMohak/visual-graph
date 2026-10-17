@@ -1,6 +1,6 @@
 import { complex as mathComplex, parse as mathParse, type Complex } from 'mathjs'
 import { complexScopeExtras, resultToC, resultToComplex } from './complex'
-import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, EvaluatePointFn, Plane } from './types'
+import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, EvaluatePointFn, EvaluateXYFn, Plane, Relation } from './types'
 
 /** User definitions visible to an expression: constants and functions by name. */
 export type Env = Record<string, unknown>
@@ -25,6 +25,8 @@ export interface ParseSuccess {
   evaluate: EvaluateFn
   evaluateComplex?: EvaluateComplexFn
   evaluatePoint?: EvaluatePointFn
+  evaluateXY?: EvaluateXYFn
+  relation?: Relation
   tRange?: [number, number]
   kind: EquationKind
   component: ComplexComponent
@@ -165,7 +167,8 @@ function normalize(input: string): Normalized {
     else push(ch, i)
   }
   const text = chars.join('')
-  const prefix = /^y=/i.exec(text)
+  // `y = ...` is explicit unless y appears again (then it is an implicit curve).
+  const prefix = /^y=/i.exec(text) && !/\by\b/.test(text.slice(2)) ? /^y=/i.exec(text) : null
   const start = prefix ? prefix[0].length : 0
   return { expr: text.slice(start), map: map.slice(start) }
 }
@@ -514,14 +517,110 @@ function parseCurve(raw: string, src: Normalized, env: Env): ParseResult {
   }
 }
 
+interface RelationAt {
+  op: Relation
+  index: number
+}
+
+/** The single top-level relation operator (=, <, <=, >, >=), or null. */
+function findRelation(expr: string): RelationAt | null {
+  let depth = 0
+  let found: RelationAt | null = null
+  for (let k = 0; k < expr.length; k++) {
+    const ch = expr[k]
+    if (ch === '(' || ch === '[') depth++
+    else if (ch === ')' || ch === ']') depth--
+    else if (depth === 0 && ch === '?') return null
+    else if (depth === 0 && (ch === '<' || ch === '>' || ch === '=')) {
+      const two = expr.slice(k, k + 2)
+      if (two === '==' || two === '!=') return null
+      if (found) return null
+      if (two === '<=' || two === '>=') {
+        found = { op: two, index: k }
+        k++
+      } else {
+        found = { op: ch as Relation, index: k }
+      }
+    }
+  }
+  return found
+}
+
+/** Implicit curve `F(x, y) = G(x, y)` or region `F(x, y) < G(x, y)`. */
+function parseImplicit(raw: string, src: Normalized, relation: RelationAt, env: Env): ParseResult {
+  const width = relation.op.length
+  const sides: Normalized[] = [
+    { expr: src.expr.slice(0, relation.index), map: src.map.slice(0, relation.index) },
+    { expr: src.expr.slice(relation.index + width), map: src.map.slice(relation.index + width) },
+  ]
+  if (!sides[0].expr || !sides[1].expr) {
+    return { ok: false, raw, message: 'incomplete expression', position: src.map[relation.index] }
+  }
+  const extras = { ...complexScopeExtras(), piecewise }
+  try {
+    const nodes = sides.map((side) => {
+      const implicit = insertImplicit(side, env, ['y'])
+      const balance = balanceCheck(implicit.expr, raw, implicit.map)
+      if (balance) throw balance
+      return mathParse(implicit.expr)
+    })
+    const [lhs, rhs] = nodes.map((node) => node.compile())
+    const evaluateXY: EvaluateXYFn = (x, y) => {
+      try {
+        const scope = { pi: Math.PI, e: Math.E, ...extras, ...env, x, y }
+        const v = (lhs.evaluate(scope) as number) - (rhs.evaluate(scope) as number)
+        return Number.isFinite(v) ? v : null
+      } catch {
+        return null
+      }
+    }
+    let finite = false
+    for (const [px, py] of [[0.3, 0.7], [1.1, -0.4], [-2.3, 1.9], [4.2, 3.1]]) {
+      if (evaluateXY(px, py) !== null) {
+        finite = true
+        break
+      }
+    }
+    if (!finite) {
+      const scope = { pi: Math.PI, e: Math.E, ...extras, ...env, x: 0.3, y: 0.7 }
+      lhs.evaluate(scope)
+      rhs.evaluate(scope)
+      return { ok: false, raw, message: 'no finite values — check the domain' }
+    }
+    const tex: Record<Relation, string> = { '=': '=', '<': '<', '<=': '\le', '>': '>', '>=': '\ge' }
+    return {
+      ok: true,
+      plot: true,
+      raw,
+      expr: src.expr,
+      latex: `${nodes[0].toTex()} ${tex[relation.op]} ${nodes[1].toTex()}`,
+      evaluate: () => null,
+      evaluateXY,
+      relation: relation.op,
+      kind: 'implicit',
+      component: 're',
+      sigma: 0.5,
+      suggestedPlane: 'xy',
+    }
+  } catch (err) {
+    if (err && typeof err === 'object' && 'ok' in err) return err as ParseFailure
+    return friendlyError(err, raw, src.map)
+  }
+}
+
 export function parseEquation(input: string, env: Env = {}): ParseResult {
   const result = parseInner(input, env)
   if (!result.ok && result.freeSymbols === undefined) {
     const { expr } = normalize(result.raw)
     const head = definitionHead(expr)
-    const body = head ? expr.slice(head.length) : expr
+    const relation = head ? null : findRelation(expr)
+    const body = head
+      ? expr.slice(head.length)
+      : relation
+        ? `${expr.slice(0, relation.index)}-(${expr.slice(relation.index + relation.op.length)})`
+        : expr
     const free = findFreeSymbols(
-      insertImplicit({ expr: body, map: [...body].map((_, k) => k) }, env, head?.param ? [head.param] : []).expr,
+      insertImplicit({ expr: body, map: [...body].map((_, k) => k) }, env, head?.param ? [head.param] : ['y']).expr,
       env,
       head?.param ? [head.param] : []
     )
@@ -546,6 +645,10 @@ function parseInner(input: string, env: Env): ParseResult {
     return parseCurve(raw, normalized, env)
   }
   const head = definitionHead(normalized.expr)
+  const relation = findRelation(normalized.expr)
+  if (relation && !(head && !RESERVED.has(head.name))) {
+    return parseImplicit(raw, normalized, relation, env)
+  }
   if (head && RESERVED.has(head.name)) {
     return { ok: false, raw, message: `"${head.name}" is a built-in name — pick another`, position: 0 }
   }
@@ -560,7 +663,7 @@ function parseInner(input: string, env: Env): ParseResult {
   let expr = implicit.expr
   // f(u) = ... : the parameter becomes the internal x (1 char -> 1 char).
   if (head?.type === 'fn' && head.param !== 'x') {
-    expr = expr.replace(new RegExp(`\b${head.param}\b`, 'g'), 'x')
+    expr = expr.replace(new RegExp(`\\b${head.param}\\b`, 'g'), 'x')
   }
   const defPrefix = head ? (head.type === 'fn' ? `${head.name}(${head.param})=` : `${head.name}=`) : ''
   try {
@@ -569,7 +672,7 @@ function parseInner(input: string, env: Env): ParseResult {
 
     if (head?.type === 'const') {
       const node = mathParse(expr)
-      if (/[xstz]/.test(expr)) {
+      if (/\b[xstz]\b/.test(expr)) {
         return { ok: false, raw, message: 'a constant cannot use x — use f(x) = ... for a function' }
       }
       const value = node.compile().evaluate({ pi: Math.PI, e: Math.E, ...complexScopeExtras(), piecewise, ...env })
