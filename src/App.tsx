@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AddAnimatedModal } from '@/components/AddAnimatedModal'
 import { AnimDebugPanel } from '@/components/AnimDebugPanel'
 import { AnimatedControls } from '@/components/AnimatedControls'
@@ -12,50 +12,22 @@ import { PlaneToggle } from '@/components/PlaneToggle'
 import { ReadoutPanel } from '@/components/ReadoutPanel'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete } from '@/graph/animated'
-import { parseEquation } from '@/graph/parse'
+import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/graph/equations'
 import { decodeShareState, encodeShareState, shareVpToViewport } from '@/graph/share'
-import type { ComplexComponent, Equation, Plane, Viewport } from '@/graph/types'
+import type { ComplexComponent, Plane, Viewport } from '@/graph/types'
 import { niceStep } from '@/graph/viewport'
-
-let equationSeq = 0
-
-function makeEquation(raw: string, colorToken: number): Equation | null {
-  const parsed = parseEquation(raw)
-  if (!parsed.ok) return null
-  equationSeq += 1
-  return {
-    id: `eq-${equationSeq}`,
-    raw: parsed.raw,
-    latex: parsed.latex,
-    evaluate: parsed.evaluate,
-    evaluateComplex: parsed.evaluateComplex,
-    kind: parsed.kind,
-    component: parsed.component,
-    sigma: parsed.sigma,
-    suggestedPlane: parsed.suggestedPlane,
-    colorToken,
-    visible: true,
-  }
-}
 
 const STORAGE_KEY_V2 = 'graph.equations.v2'
 const STORAGE_KEY_V1 = 'graph.equations.v1'
 
-function equationsFromRaws(raws: string[], vis?: number[], col?: number[]): Equation[] {
-  const loaded: Equation[] = []
-  for (let i = 0; i < raws.length; i++) {
-    const raw = raws[i]
+function specsFromRaws(raws: string[], vis?: number[], col?: number[]): EquationSpec[] {
+  return raws.map((raw, i) => {
     const colVal = col?.[i]
     const colorToken = colVal !== undefined && Number.isFinite(colVal)
       ? Math.min(4, Math.max(0, Math.round(colVal)))
-      : loaded.length % 5
-    const equation = makeEquation(raw, colorToken)
-    if (equation) {
-      if (vis?.[i] === 0) equation.visible = false
-      loaded.push(equation)
-    }
-  }
-  return loaded
+      : i % 5
+    return { id: newSpecId(), raw, colorToken, visible: vis?.[i] !== 0 }
+  })
 }
 
 interface PersistedV2 {
@@ -67,15 +39,15 @@ interface PersistedV2 {
   col?: number[]
 }
 
-function loadPersisted(): { equations: Equation[]; plane: Plane; sigma: number; comp: ComplexComponent } {
-  const fallback = { equations: [] as Equation[], plane: 'xy' as Plane, sigma: 0.5, comp: 're' as ComplexComponent }
+function loadPersisted(): { specs: EquationSpec[]; plane: Plane; sigma: number; comp: ComplexComponent } {
+  const fallback = { specs: [] as EquationSpec[], plane: 'xy' as Plane, sigma: 0.5, comp: 're' as ComplexComponent }
   // URL hash takes precedence on load (share deep-links).
   const hash = window.location.hash
   if (hash && hash.length > 1) {
     const state = decodeShareState(hash)
     if (state) {
       return {
-        equations: equationsFromRaws(state.eq, state.vis, state.col),
+        specs: specsFromRaws(state.eq, state.vis, state.col),
         plane: state.plane ?? 'xy',
         sigma: typeof state.sigma === 'number' ? state.sigma : 0.5,
         comp: state.comp ?? 're',
@@ -90,7 +62,7 @@ function loadPersisted(): { equations: Equation[]; plane: Plane; sigma: number; 
         const v2 = parsed as PersistedV2
         const raws = v2.eq.filter((item): item is string => typeof item === 'string')
         return {
-          equations: equationsFromRaws(raws, v2.vis, v2.col),
+          specs: specsFromRaws(raws, v2.vis, v2.col),
           plane: v2.plane === 'st' || v2.plane === 'reim' ? v2.plane : 'xy',
           sigma: typeof v2.sigma === 'number' && Number.isFinite(v2.sigma) ? v2.sigma : 0.5,
           comp: v2.comp === 'im' || v2.comp === 'abs' || v2.comp === 'arg' ? v2.comp : 're',
@@ -102,7 +74,7 @@ function loadPersisted(): { equations: Equation[]; plane: Plane; sigma: number; 
       const parsed: unknown = JSON.parse(legacy)
       if (Array.isArray(parsed)) {
         const raws = parsed.filter((item): item is string => typeof item === 'string')
-        if (raws.length) return { ...fallback, equations: equationsFromRaws(raws) }
+        if (raws.length) return { ...fallback, specs: specsFromRaws(raws) }
       }
     }
   } catch {
@@ -111,17 +83,21 @@ function loadPersisted(): { equations: Equation[]; plane: Plane; sigma: number; 
   return fallback
 }
 
-function nextColorToken(equations: Equation[]): number {
-  const used = new Set(equations.map((equation) => equation.colorToken))
-  for (let token = 0; token < 5; token++) {
-    if (!used.has(token)) return token
+/** Append raws as new specs; returns prev unchanged when nothing parses. */
+function appendSpecs(prev: EquationSpec[], raws: string[]): EquationSpec[] {
+  const next = [...prev]
+  for (const raw of raws) {
+    next.push({ id: newSpecId(), raw, colorToken: nextColorToken(next), visible: true })
   }
-  return equations.length % 5
+  return next.length === prev.length ? prev : next
 }
 
 export default function App() {
   const [initial] = useState(loadPersisted)
-  const [equations, setEquations] = useState<Equation[]>(initial.equations)
+  const [specs, setSpecs] = useState<EquationSpec[]>(initial.specs)
+  const built = useMemo(() => buildEquations(specs), [specs])
+  const equations = built.equations
+  const plotted = useMemo(() => equations.filter((equation) => equation.plot), [equations])
   const [activePlane, setActivePlane] = useState<Plane>(initial.plane)
   const [sigma, setSigma] = useState(initial.sigma)
   const [component, setComponent] = useState<ComplexComponent>(initial.comp)
@@ -140,7 +116,9 @@ export default function App() {
 
   // --- Animated mode state (v1: in-memory only, no persistence) ---
   const [mode, setMode] = useState<GraphMode>('static')
-  const [animatedEquations, setAnimatedEquations] = useState<Equation[]>([])
+  const [animatedSpecs, setAnimatedSpecs] = useState<EquationSpec[]>([])
+  const animatedBuilt = useMemo(() => buildEquations(animatedSpecs), [animatedSpecs])
+  const animatedEquations = animatedBuilt.equations
   const [playing, setPlaying] = useState(true)
   const [drawTime, setDrawTime] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
@@ -253,50 +231,18 @@ export default function App() {
     setPlaying((prev) => !prev)
   }
 
-  const addRaw = (raws: string[]) => {
-    setEquations((prev) => {
-      const next = [...prev]
-      for (const raw of raws) {
-        const equation = makeEquation(raw, nextColorToken(next))
-        if (equation) next.push(equation)
-      }
-      return next.length === prev.length ? prev : next
-    })
-  }
+  const setActiveSpecs = animated ? setAnimatedSpecs : setSpecs
 
-  const addAnimatedRaw = (raws: string[]) => {
-    setAnimatedEquations((prev) => {
-      const next = [...prev]
-      for (const raw of raws) {
-        const equation = makeEquation(raw, nextColorToken(next))
-        if (equation) next.push(equation)
-      }
-      return next.length === prev.length ? prev : next
-    })
-  }
+  const addRaw = (raws: string[]) => setSpecs((prev) => appendSpecs(prev, raws))
+
+  const addAnimatedRaw = (raws: string[]) => setAnimatedSpecs((prev) => appendSpecs(prev, raws))
 
   const toggleEquation = (id: string) => {
-    if (animated) {
-      setAnimatedEquations((prev) =>
-        prev.map((equation) =>
-          equation.id === id ? { ...equation, visible: !equation.visible } : equation
-        )
-      )
-    } else {
-      setEquations((prev) =>
-        prev.map((equation) =>
-          equation.id === id ? { ...equation, visible: !equation.visible } : equation
-        )
-      )
-    }
+    setActiveSpecs((prev) => prev.map((spec) => (spec.id === id ? { ...spec, visible: !spec.visible } : spec)))
   }
 
   const deleteEquation = (id: string) => {
-    if (animated) {
-      setAnimatedEquations((prev) => prev.filter((equation) => equation.id !== id))
-    } else {
-      setEquations((prev) => prev.filter((equation) => equation.id !== id))
-    }
+    setActiveSpecs((prev) => prev.filter((spec) => spec.id !== id))
   }
 
   const getStepSize = (): number => {
@@ -305,19 +251,19 @@ export default function App() {
   }
 
   const handleShare = (): string | null => {
-    if (equations.length === 0) return null
+    if (specs.length === 0) return null
     const viewport = graphRef.current?.getViewport()
     if (!viewport) return null
     const homes = graphRef.current?.getHomes()
     try {
       const payload = encodeShareState({
-        eq: equations.map((equation) => equation.raw),
+        eq: specs.map((spec) => spec.raw),
         vp: { s: viewport.scale, ox: viewport.originX, oy: viewport.originY },
         plane: activePlane,
         sigma,
         comp: component,
-        vis: equations.map((equation) => (equation.visible ? 1 : 0)),
-        col: equations.map((equation) => equation.colorToken),
+        vis: specs.map((spec) => (spec.visible ? 1 : 0)),
+        col: specs.map((spec) => spec.colorToken),
         homes: homes
           ? {
               xy: homes.xy ? { s: homes.xy.scale, ox: homes.xy.originX, oy: homes.xy.originY } : null,
@@ -338,18 +284,18 @@ export default function App() {
   useEffect(() => {
     try {
       const payload: PersistedV2 = {
-        eq: equations.map((equation) => equation.raw),
+        eq: specs.map((spec) => spec.raw),
         plane: activePlane,
         sigma,
         comp: component,
-        vis: equations.map((equation) => (equation.visible ? 1 : 0)),
-        col: equations.map((equation) => equation.colorToken),
+        vis: specs.map((spec) => (spec.visible ? 1 : 0)),
+        col: specs.map((spec) => spec.colorToken),
       }
       window.localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(payload))
     } catch {
       // Storage full / unavailable — equations stay in memory only.
     }
-  }, [equations, activePlane, sigma, component])
+  }, [specs, activePlane, sigma, component])
 
   useEffect(() => {
     const state = decodeShareState(window.location.hash)
@@ -451,6 +397,7 @@ export default function App() {
           sigma={sigma}
           component={component}
           theme={theme}
+          defRaws={animated ? animatedBuilt.defRaws : built.defRaws}
         />
         <div
           role="tablist"
@@ -476,7 +423,7 @@ export default function App() {
         {activeEquations.length === 0 && <EmptyGraph />}
         {!animated && (
           <ReadoutPanel
-            equations={equations}
+            equations={plotted}
             snapX={snapX}
             onSnapXChange={setSnapX}
             getStepSize={getStepSize}
@@ -492,6 +439,7 @@ export default function App() {
           <CommandBar
             ref={commandRef}
             onAdd={addRaw}
+            env={built.env}
             onShare={handleShare}
             activePlane={activePlane}
             sigma={sigma}
@@ -525,6 +473,7 @@ export default function App() {
           open={animated && addOpen}
           onClose={() => setAddOpen(false)}
           onAdd={addAnimatedRaw}
+          env={animatedBuilt.env}
         />
       </main>
       </TooltipProvider>

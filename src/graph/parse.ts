@@ -2,8 +2,23 @@ import { complex as mathComplex, parse as mathParse, type Complex } from 'mathjs
 import { complexScopeExtras, resultToC, resultToComplex } from './complex'
 import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, Plane } from './types'
 
+/** User definitions visible to an expression: constants and functions by name. */
+export type Env = Record<string, unknown>
+
+export interface Definition {
+  name: string
+  type: 'const' | 'fn'
+  /** Constant value (const definitions). */
+  value?: number
+  /** Callable for function definitions (works in mathjs scope). */
+  fn?: (...args: unknown[]) => unknown
+}
+
 export interface ParseSuccess {
   ok: true
+  /** False for constant definitions like `a = 2`. */
+  plot: boolean
+  def?: Definition
   raw: string
   expr: string
   latex: string
@@ -20,6 +35,8 @@ export interface ParseFailure {
   raw: string
   message: string
   position?: number
+  /** Single-letter symbols with no definition (candidates for sliders). */
+  freeSymbols?: string[]
 }
 
 export type ParseResult = ParseSuccess | ParseFailure
@@ -66,7 +83,20 @@ const KNOWN_SYMBOLS = [
   'im',
   'arg',
   'conj',
+  'piecewise',
 ]
+
+const VARIABLE_NAMES = new Set(['pi', 'e', 'x', 'i', 's', 'z', 't'])
+const FUNCTION_NAMES = new Set(KNOWN_SYMBOLS.filter((name) => !VARIABLE_NAMES.has(name)))
+const RESERVED = new Set([...KNOWN_SYMBOLS, 'y', 'r', 'theta'])
+
+/** piecewise(c1, v1, c2, v2, ..., [default]): first value whose condition holds. */
+export function piecewise(...args: unknown[]): unknown {
+  for (let k = 0; k + 1 < args.length; k += 2) {
+    if (args[k]) return args[k + 1]
+  }
+  return args.length % 2 === 1 ? args[args.length - 1] : NaN
+}
 
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0
@@ -132,9 +162,120 @@ function normalize(input: string): Normalized {
     else push(ch, i)
   }
   const text = chars.join('')
-  const prefix = /^(?:y|f\(x\))=/i.exec(text)
+  const prefix = /^y=/i.exec(text)
   const start = prefix ? prefix[0].length : 0
   return { expr: text.slice(start), map: map.slice(start) }
+}
+
+
+/**
+ * Split a run of letters into known names: `xsin` -> [x, sin], `pix` -> [pi, x].
+ * Prefers the fewest tokens. Returns null when no split covers the run.
+ */
+function splitIdentifier(run: string, isKnown: (name: string) => boolean): string[] | null {
+  const best: (string[] | null)[] = new Array(run.length + 1).fill(null)
+  best[0] = []
+  for (let end = 1; end <= run.length; end++) {
+    for (let start = 0; start < end; start++) {
+      const prev = best[start]
+      if (!prev) continue
+      const piece = run.slice(start, end)
+      if (!isKnown(piece)) continue
+      if (!best[end] || best[end]!.length > prev.length + 1) best[end] = [...prev, piece]
+    }
+  }
+  return best[run.length]
+}
+
+/**
+ * Insert `*` for implicit multiplication the parser does not handle itself:
+ * `xsin(x)` -> `x*sin(x)`, `x(x+1)` -> `x*(x+1)`, `2pix` -> `2pi*x`.
+ * The position map grows with each inserted `*` so error carets stay right.
+ */
+function insertImplicit(src: Normalized, env: Env, extraVars: string[] = []): Normalized {
+  const { expr, map } = src
+  const isFn = (name: string) =>
+    FUNCTION_NAMES.has(name) || typeof env[name] === 'function'
+  const isVar = (name: string) =>
+    VARIABLE_NAMES.has(name) || extraVars.includes(name) || (name in env && typeof env[name] !== 'function')
+  const isKnown = (name: string) => isFn(name) || isVar(name)
+  const out: string[] = []
+  const outMap: number[] = []
+  const push = (text: string, index: number) => {
+    for (const ch of text) {
+      out.push(ch)
+      outMap.push(index)
+    }
+  }
+  let i = 0
+  while (i < expr.length) {
+    const ch = expr[i]
+    const prevChar = i > 0 ? expr[i - 1] : ''
+    // Identifiers that start right after a digit and contain digits are numbers (2e3).
+    if (/[a-zA-Z_]/.test(ch) && !(/[0-9.]/.test(prevChar) && /^e[0-9+-]/.test(expr.slice(i, i + 2)))) {
+      let j = i
+      while (j < expr.length && /[a-zA-Z0-9_]/.test(expr[j])) j++
+      const run = expr.slice(i, j)
+      const parts = isKnown(run) ? [run] : splitIdentifier(run, isKnown)
+      if (!parts) {
+        push(run, map[i])
+      } else {
+        let offset = i
+        parts.forEach((part, k) => {
+          if (k > 0) push('*', map[offset])
+          push(part, map[offset])
+          offset += part.length
+        })
+      }
+      const last = parts ? parts[parts.length - 1] : run
+      if (expr[j] === '(' && parts && !isFn(last)) push('*', map[j])
+      i = j
+      continue
+    }
+    push(ch, map[i])
+    i++
+  }
+  return { expr: out.join(''), map: outMap }
+}
+
+const FN_DEF_RE = /^([a-zA-Z][a-zA-Z0-9_]*)\(([a-zA-Z])\)=/
+const CONST_DEF_RE = /^([a-zA-Z][a-zA-Z0-9_]*)=/
+
+interface DefHead {
+  name: string
+  type: 'const' | 'fn'
+  param?: string
+  length: number
+}
+
+function definitionHead(expr: string): DefHead | null {
+  const fnMatch = FN_DEF_RE.exec(expr)
+  if (fnMatch) return { name: fnMatch[1], type: 'fn', param: fnMatch[2], length: fnMatch[0].length }
+  const constMatch = CONST_DEF_RE.exec(expr)
+  if (constMatch && !expr.slice(constMatch[0].length).startsWith('=')) {
+    return { name: constMatch[1], type: 'const', length: constMatch[0].length }
+  }
+  return null
+}
+
+/** Names of undefined single-letter symbols in an expression. */
+function findFreeSymbols(expr: string, env: Env, extraVars: string[] = []): string[] {
+  const found = new Set<string>()
+  try {
+    mathParse(expr).traverse((node, _path, parent) => {
+      const symbol = node as unknown as { type: string; name: string }
+      if (symbol.type !== 'SymbolNode') return
+      const call = parent as unknown as { type: string; fn?: unknown } | null
+      if (call && call.type === 'FunctionNode' && call.fn === node) return
+      const name = symbol.name
+      if (/^[a-zA-Z]$/.test(name) && !VARIABLE_NAMES.has(name) && !extraVars.includes(name) && !(name in env)) {
+        if (name !== 'y' && name !== 'r') found.add(name)
+      }
+    })
+  } catch {
+    // unparsable: no free symbols reported
+  }
+  return [...found]
 }
 
 /**
@@ -272,18 +413,79 @@ function toTexSafe(expr: string, fallback: string): string {
   }
 }
 
-export function parseEquation(input: string): ParseResult {
+export function parseEquation(input: string, env: Env = {}): ParseResult {
+  const result = parseInner(input, env)
+  if (!result.ok && result.freeSymbols === undefined) {
+    const { expr } = normalize(result.raw)
+    const head = definitionHead(expr)
+    const body = head ? expr.slice(head.length) : expr
+    const free = findFreeSymbols(
+      insertImplicit({ expr: body, map: [...body].map((_, k) => k) }, env, head?.param ? [head.param] : []).expr,
+      env,
+      head?.param ? [head.param] : []
+    )
+    if (free.length) {
+      result.freeSymbols = free
+      result.message = `unknown symbol${free.length > 1 ? 's' : ''} ${free.map((name) => `"${name}"`).join(', ')}`
+    }
+  }
+  return result
+}
+
+function parseInner(input: string, env: Env): ParseResult {
   const raw = input.trim()
   if (!raw) {
     return { ok: false, raw, message: 'empty expression' }
   }
-  const { expr, map } = normalize(raw)
-  if (!expr) {
+  const normalized = normalize(raw)
+  if (!normalized.expr) {
     return { ok: false, raw, message: 'empty expression' }
   }
+  const head = definitionHead(normalized.expr)
+  if (head && RESERVED.has(head.name)) {
+    return { ok: false, raw, message: `"${head.name}" is a built-in name — pick another`, position: 0 }
+  }
+  const bodySrc = head
+    ? { expr: normalized.expr.slice(head.length), map: normalized.map.slice(head.length) }
+    : normalized
+  if (!bodySrc.expr) {
+    return { ok: false, raw, message: 'empty expression' }
+  }
+  const implicit = insertImplicit(bodySrc, env, head?.param ? [head.param] : [])
+  const map = implicit.map
+  let expr = implicit.expr
+  // f(u) = ... : the parameter becomes the internal x (1 char -> 1 char).
+  if (head?.type === 'fn' && head.param !== 'x') {
+    expr = expr.replace(new RegExp(`\b${head.param}\b`, 'g'), 'x')
+  }
+  const defPrefix = head ? (head.type === 'fn' ? `${head.name}(${head.param})=` : `${head.name}=`) : ''
   try {
     const balance = balanceCheck(expr, raw, map)
     if (balance) return balance
+
+    if (head?.type === 'const') {
+      const node = mathParse(expr)
+      if (/[xstz]/.test(expr)) {
+        return { ok: false, raw, message: 'a constant cannot use x — use f(x) = ... for a function' }
+      }
+      const value = node.compile().evaluate({ pi: Math.PI, e: Math.E, ...complexScopeExtras(), piecewise, ...env })
+      if (!finiteReal(value)) {
+        return { ok: false, raw, message: 'a constant must be a real number' }
+      }
+      return {
+        ok: true,
+        plot: false,
+        def: { name: head.name, type: 'const', value },
+        raw,
+        expr,
+        latex: `${head.name}=${toTexSafe(expr, expr)}`,
+        evaluate: () => null,
+        kind: 'real',
+        component: 're',
+        sigma: 0.5,
+        suggestedPlane: 'xy',
+      }
+    }
 
     const usesSZ = VAR_S_Z_RE.test(expr)
     const usesT = VAR_T_RE.test(expr)
@@ -301,24 +503,25 @@ export function parseEquation(input: string): ParseResult {
     }
 
     const compiled = node.compile()
-    const extras = complexScopeExtras()
+    const extras = { ...complexScopeExtras(), piecewise }
 
     const probeReal = (x: number): unknown => {
-      const scope: Record<string, unknown> = { x, t: x, s: x, z: x, pi: Math.PI, e: Math.E, ...extras }
+      const scope: Record<string, unknown> = { pi: Math.PI, e: Math.E, ...extras, ...env, x, t: x, s: x, z: x }
       return compiled.evaluate(scope)
     }
 
     const probeComplex = (s: Complex): unknown => {
       const t = s.im
       const scope: Record<string, unknown> = {
+        pi: Math.PI,
+        e: Math.E,
+        ...extras,
+        ...env,
         x: s,
         t,
         s,
         z: s,
         i: mathComplex(0, 1),
-        pi: Math.PI,
-        e: Math.E,
-        ...extras,
       }
       return compiled.evaluate(scope)
     }
@@ -390,6 +593,15 @@ export function parseEquation(input: string): ParseResult {
 
     const sigma = 0.5
     const component: ComplexComponent = 're'
+    const def: Definition | undefined =
+      head?.type === 'fn'
+        ? {
+            name: head.name,
+            type: 'fn',
+            fn: (arg: unknown) => compiled.evaluate({ pi: Math.PI, e: Math.E, ...extras, ...env, x: arg, t: arg, s: arg, z: arg }),
+          }
+        : undefined
+    if (defPrefix) latex = `${head?.type === 'fn' ? `${head.name}(${head.param})` : head?.name}=${latex}`
 
     if (kind === 'real') {
       const evaluate: EvaluateFn = (x) => {
@@ -400,7 +612,7 @@ export function parseEquation(input: string): ParseResult {
           return null
         }
       }
-      return { ok: true, raw, expr, latex, evaluate, kind, component, sigma, suggestedPlane }
+      return { ok: true, plot: true, def, raw, expr, latex, evaluate, kind, component, sigma, suggestedPlane }
     }
 
     // Complex kinds: real slice evaluator returns Re(component) at sigma fixed,
@@ -430,9 +642,11 @@ export function parseEquation(input: string): ParseResult {
 
     return {
       ok: true,
+      plot: true,
+      def,
       raw,
       expr,
-      latex: toTexSafe(internalExpr, latex),
+      latex: defPrefix + toTexSafe(internalExpr, latex),
       evaluate,
       evaluateComplex,
       kind,

@@ -37,7 +37,10 @@ Tips:
 
 - The `y =` prefix is optional: `y = sin(x)/x` and `sin(x)/x` are the same.
 - One variable only: `x`. Constants `pi` and `e` are available.
-- Use `*` for multiplication: `2*(x+1)`, not `2(x+1)`.
+- Implicit multiplication works: `2x`, `2(x+1)`, `x sin(x)`, `2pi x`.
+- Define constants and functions, then reuse them: `a = 2`, `f(x) = a*x^2`,
+  then `f(x+1)`. Definitions can appear in any order.
+- Piecewise: `x < 0 ? -x : x^2` or `piecewise(x < 0, -x, x^2)`.
 - Invalid input shows an inline error and moves the cursor to the problem
   spot; nothing is added until it parses.
 - Paste multiple lines at once to add several curves in one go
@@ -66,7 +69,7 @@ it fills the input so you can preview it, then press Enter to add it.
 ### Supported functions
 
 `sin cos tan cot sec csc asin acos atan sinh cosh tanh exp log log2 log10
-sqrt cbrt abs sign round floor ceil min max pow mod`, plus `pi`, `e`, `x`
+sqrt cbrt abs sign round floor ceil min max pow mod piecewise`, plus `pi`, `e`, `x`
 and operators `+ - * / ^ ( )`.
 
 ## Working with curves

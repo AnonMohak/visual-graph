@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { Kbd } from '@/components/ui/kbd'
-import { parseEquation, type ParseFailure } from '@/graph/parse'
+import { parseEquation, type Env, type ParseFailure } from '@/graph/parse'
 import type { ComplexComponent, Plane } from '@/graph/types'
 import { cn } from '@/lib/utils'
 
@@ -50,11 +50,25 @@ interface CommandBarProps {
   onSigmaChange?: (sigma: number) => void
   onComponentChange?: (component: ComplexComponent) => void
   onPlaneSwitch?: (plane: Plane) => void
+  /** User definitions (constants, functions) visible to new equations. */
+  env?: Env
 }
 
 export interface CommandBarApi {
   focus: () => void
   clear: () => void
+}
+
+const EMPTY_ENV: Env = {}
+
+/** Parse lines in order; definitions on earlier lines are visible to later ones. */
+function parseLines(lines: string[], env: Env) {
+  const local: Env = { ...env }
+  return lines.map((line) => {
+    const result = parseEquation(line, local)
+    if (result.ok && result.def) local[result.def.name] = result.def.type === 'const' ? result.def.value : result.def.fn
+    return result
+  })
 }
 
 const COMPONENTS: ComplexComponent[] = ['re', 'im', 'abs', 'arg']
@@ -70,6 +84,7 @@ export function CommandBar({
   onSigmaChange,
   onComponentChange,
   onPlaneSwitch,
+  env = EMPTY_ENV,
 }: CommandBarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -82,7 +97,7 @@ export function CommandBar({
     setStoredNotice({ value, tone, text })
   }
 
-  const preview = useMemo(() => (value.trim() ? parseEquation(value) : null), [value])
+  const preview = useMemo(() => (value.trim() ? parseEquation(value, env) : null), [value, env])
   const previewComplex = preview && preview.ok && preview.kind !== 'real'
 
   const placeholder =
@@ -126,8 +141,7 @@ export function CommandBar({
   const addLines = (lines: string[]) => {
     const valid: string[] = []
     let firstError: ParseFailure | null = null
-    for (const line of lines) {
-      const result = parseEquation(line)
+    for (const result of parseLines(lines, env)) {
       if (result.ok) valid.push(result.raw)
       else if (!firstError) firstError = result
     }
@@ -172,8 +186,7 @@ export function CommandBar({
     if (!lines.length) return
     const valid: string[] = []
     let error: ParseFailure | null = null
-    for (const line of lines) {
-      const result = parseEquation(line)
+    for (const result of parseLines(lines, env)) {
       if (result.ok) valid.push(result.raw)
       else if (!error) error = result
     }

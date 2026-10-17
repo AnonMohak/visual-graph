@@ -74,6 +74,8 @@ interface GraphCanvasProps {
   /** Controlled field source equation id for the st plane. Null = zeta fallback. */
   fieldSourceId?: string | null
   onFieldSourceChange?: (id: string | null) => void
+  /** Definition raws so the field worker can rebuild user functions. */
+  defRaws?: string[]
 }
 
 interface SampleEntry {
@@ -159,6 +161,7 @@ export function GraphCanvas({
   theme = 'neon',
   fieldSourceId: controlledFieldId,
   onFieldSourceChange,
+  defRaws = [],
 }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fieldCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -177,7 +180,8 @@ export function GraphCanvas({
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
   const pinchRef = useRef<{ dist: number; cx: number; cy: number } | null>(null)
   const draggingRef = useRef(false)
-  const equationsRef = useRef(equations)
+  const equationsRef = useRef(equations.filter((eq) => eq.plot))
+  const defRawsRef = useRef(defRaws)
   const snapRef = useRef(snapX)
   const drawTimeRef = useRef(drawTime)
   const unitsPerSecRef = useRef(unitsPerSec)
@@ -270,7 +274,7 @@ export function GraphCanvas({
         worker.removeEventListener('message', onMsg as EventListener)
       }
       worker.addEventListener('message', onMsg as EventListener)
-      worker.postMessage({ jobId, raw, width: w, height: h, viewport: { ...vp }, terms, step })
+      worker.postMessage({ jobId, raw, defs: defRawsRef.current, width: w, height: h, viewport: { ...vp }, terms, step })
       return
     } catch {
       // Worker unavailable — synchronous fallback below.
@@ -351,7 +355,7 @@ export function GraphCanvas({
           continue
         }
         if (animated && fullBase) {
-          const fullSig = `${fullBase}|${equation.id}`
+          const fullSig = `${fullBase}|${equation.id}|${equation.rev}`
           let entry = cache.get(equation.id)
           if (!entry || entry.sig !== fullSig) {
             entry = {
@@ -376,7 +380,7 @@ export function GraphCanvas({
           })
           continue
         }
-        const sig = `${sigBase}|${equation.id}`
+        const sig = `${sigBase}|${equation.id}|${equation.rev}`
         let entry = cache.get(equation.id)
         if (!entry || entry.sig !== sig) {
           entry = {
@@ -415,7 +419,7 @@ export function GraphCanvas({
       if (equation.kind === 'real') {
         const evaluate = equation.evaluate
         if (animated && fullBase) {
-          const fullSig = `${fullBase}|${equation.id}`
+          const fullSig = `${fullBase}|${equation.id}|${equation.rev}`
           let entry = cache.get(equation.id)
           if (!entry || entry.sig !== fullSig) {
             entry = {
@@ -439,9 +443,9 @@ export function GraphCanvas({
           }
         }
         let entry = cache.get(equation.id)
-        if (!entry || entry.sig !== sigBase + equation.id) {
+        if (!entry || entry.sig !== sigBase + equation.id + equation.rev) {
           entry = {
-            sig: sigBase + equation.id,
+            sig: sigBase + equation.id + equation.rev,
             samples: sampleCurve(evaluate, bounds, {
               heightPx: h,
               scaleX: vp.scale,
@@ -472,7 +476,7 @@ export function GraphCanvas({
         }
       }
       if (animated && fullBase) {
-        const fullSig = `${fullBase}|${equation.id}`
+        const fullSig = `${fullBase}|${equation.id}|${equation.rev}`
         let entry = cache.get(equation.id)
         if (!entry || entry.sig !== fullSig) {
           entry = {
@@ -501,7 +505,7 @@ export function GraphCanvas({
           evaluate: equation.evaluate,
         }
       }
-      const sig = `${sigBase}|${equation.id}`
+      const sig = `${sigBase}|${equation.id}|${equation.rev}`
       let entry = cache.get(equation.id)
       if (!entry || entry.sig !== sig) {
         entry = {
@@ -660,7 +664,7 @@ export function GraphCanvas({
       const vp = viewportRef.current
       const fieldEq = resolveFieldEq()
       // Field signature keyed by stable equation id (fallback zeta), not raw text.
-      const fieldSig = `${Math.round(vp.scale * 10)}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${fieldEq?.id ?? 'zeta'}|${spacing}`
+      const fieldSig = `${Math.round(vp.scale * 10)}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${fieldEq ? fieldEq.id + fieldEq.rev : 'zeta'}|${spacing}`
       requestField(fieldSig, w, h, vp, fieldEq)
       const fieldCanvas = fieldImageRef.current?.sig === fieldSig ? fieldImageRef.current.canvas : null
       // Publish a trivial status for legend.
@@ -910,7 +914,8 @@ export function GraphCanvas({
   )
 
   useEffect(() => {
-    equationsRef.current = equations
+    equationsRef.current = equations.filter((eq) => eq.plot)
+    defRawsRef.current = defRaws
     snapRef.current = snapX
     drawTimeRef.current = drawTime
     unitsPerSecRef.current = unitsPerSec
@@ -1053,7 +1058,7 @@ export function GraphCanvas({
     reset()
   }
 
-  const stComplexes = complexEquations(equations)
+  const stComplexes = complexEquations(equations.filter((eq) => eq.plot))
   const showFieldPicker = plane === 'st' && stComplexes.length > 1
   const activeFieldId = fieldSourceId && stComplexes.some((eq) => eq.id === fieldSourceId)
     ? fieldSourceId

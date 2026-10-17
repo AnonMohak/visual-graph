@@ -103,7 +103,10 @@ export function Legend({ equations, onToggle, onDelete, className, sigma = 0.5, 
                     </>
                   )}
                 </div>
-                {hasPoints === false && equation.visible && (
+                {equation.error && (
+                  <span className="pl-[1.1rem] text-[11px] text-destructive">{equation.error}</span>
+                )}
+                {hasPoints === false && equation.visible && equation.plot && (
                   <span className="pl-[1.1rem] text-[11px] text-muted-foreground">
                     no real points in view
                   </span>

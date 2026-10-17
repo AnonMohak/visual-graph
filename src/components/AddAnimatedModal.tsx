@@ -4,21 +4,22 @@ import 'katex/dist/katex.min.css'
 import { Button } from '@/components/ui/button'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group'
 import { ANIMATED_EXAMPLES, usesTimeVariable } from '@/graph/animated'
-import { parseEquation } from '@/graph/parse'
+import { parseEquation, type Env } from '@/graph/parse'
 import { cn } from '@/lib/utils'
 
 interface AddAnimatedModalProps {
+  env?: Env
   open: boolean
   onClose: () => void
   onAdd: (raws: string[]) => void
 }
 
-export function AddAnimatedModal({ open, onClose, onAdd }: AddAnimatedModalProps) {
+export function AddAnimatedModal({ open, onClose, onAdd, env = {} }: AddAnimatedModalProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [value, setValue] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
 
-  const preview = useMemo(() => (value.trim() ? parseEquation(value) : null), [value])
+  const preview = useMemo(() => (value.trim() ? parseEquation(value, env) : null), [value, env])
 
   const latexHtml = useMemo(() => {
     if (!preview || !preview.ok) return null
@@ -59,7 +60,7 @@ export function AddAnimatedModal({ open, onClose, onAdd }: AddAnimatedModalProps
     const valid: string[] = []
     let firstError: string | null = null
     for (const line of lines) {
-      const result = parseEquation(line)
+      const result = parseEquation(line, env)
       if (result.ok) valid.push(result.raw)
       else if (!firstError) firstError = result.message
     }

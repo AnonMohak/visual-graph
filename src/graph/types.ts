@@ -19,6 +19,16 @@ export interface Equation {
   suggestedPlane: Plane
   colorToken: number
   visible: boolean
+  /** False for constant definitions (`a = 2`) and equations that failed to parse. */
+  plot: boolean
+  /** Name this equation defines (`a` in `a = 2`, `f` in `f(x) = ...`). */
+  defName?: string
+  /** Current value of a constant definition. */
+  constValue?: number
+  /** Parse error after a dependency changed (e.g. its definition was deleted). */
+  error?: string
+  /** Changes whenever the curve's values may change; part of the sample cache key. */
+  rev: string
 }
 
 export interface Segment {
