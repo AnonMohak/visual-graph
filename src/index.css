@@ -167,3 +167,45 @@
     @apply font-mono;
     }
 }
+/* Colorblind-safe palette (Okabe-Ito). Applies to both graph themes. */
+[data-palette="colorblind"] {
+    --chart-1: #0072b2;
+    --chart-2: #e69f00;
+    --chart-3: #009e73;
+    --chart-4: #cc79a7;
+    --chart-5: #56b4e9;
+}
+
+[data-graph-theme="neon"][data-palette="colorblind"] {
+    --chart-1: #56b4e9;
+    --chart-5: #f0e442;
+}
+
+/* High-contrast palette: saturated curves and a stronger grid and axes. */
+[data-graph-theme="neon"][data-palette="contrast"] {
+    --background: oklch(0 0 0);
+    --foreground: oklch(1 0 0);
+    --muted-foreground: oklch(0.9 0 0);
+    --graph-grid-minor: oklch(1 0 0 / 14%);
+    --graph-grid-major: oklch(1 0 0 / 30%);
+    --graph-axis: oklch(1 0 0);
+    --chart-1: #ffd400;
+    --chart-2: #00e5ff;
+    --chart-3: #ff4fd8;
+    --chart-4: #7cff4f;
+    --chart-5: #ff8a1c;
+}
+
+[data-graph-theme="paper"][data-palette="contrast"] {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0 0 0);
+    --muted-foreground: oklch(0.25 0 0);
+    --graph-grid-minor: oklch(0 0 0 / 14%);
+    --graph-grid-major: oklch(0 0 0 / 32%);
+    --graph-axis: oklch(0 0 0);
+    --chart-1: #0033cc;
+    --chart-2: #c00000;
+    --chart-3: #006b1f;
+    --chart-4: #7a00a8;
+    --chart-5: #a35200;
+}

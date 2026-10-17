@@ -13,6 +13,8 @@ import { ReadoutPanel } from '@/components/ReadoutPanel'
 import { ToggleBar } from '@/components/ToggleBar'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { ValueTable } from '@/components/ValueTable'
+import { ViewPanel } from '@/components/ViewPanel'
+import { loadView, saveView, type ViewSettings } from '@/graph/view'
 import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete } from '@/graph/animated'
 import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/graph/equations'
 import { initHistory, record, redo, undo } from '@/graph/history'
@@ -104,7 +106,9 @@ export default function App() {
   const specs = history.present
   const setSpecs = (update: (prev: EquationSpec[]) => EquationSpec[], tag?: string) =>
     setHistory((prev) => record(prev, update(prev.present), tag))
-  const built = useMemo(() => buildEquations(specs), [specs])
+  const [view, setView] = useState<ViewSettings>(loadView)
+  const [viewOpen, setViewOpen] = useState(false)
+  const built = useMemo(() => buildEquations(specs, { angle: view.angle }), [specs, view.angle])
   const equations = built.equations
   const plotted = useMemo(() => equations.filter((equation) => equation.plot), [equations])
   const [activePlane, setActivePlane] = useState<Plane>(initial.plane)
@@ -117,8 +121,19 @@ export default function App() {
   )
 
   useEffect(() => {
-    document.documentElement.dataset.graphTheme = theme
-  }, [theme])
+    const root = document.documentElement
+    root.dataset.graphTheme = theme
+    root.classList.toggle('dark', theme === 'neon')
+    root.dataset.palette = view.palette
+  }, [theme, view.palette])
+
+  useEffect(() => saveView(view), [view])
+
+  const changeView = (patch: Partial<ViewSettings>) => {
+    setView((prev) => ({ ...prev, ...patch }))
+    // Log axes change what the canvas coordinates mean: return home.
+    if (patch.logX !== undefined || patch.logY !== undefined) requestAnimationFrame(() => graphRef.current?.reset())
+  }
   const [snapX, setSnapX] = useState<number | null>(null)
   const [analysis, setAnalysis] = useState({ points: false, tangent: false })
   const [tableOpen, setTableOpen] = useState(false)
@@ -128,7 +143,7 @@ export default function App() {
   // --- Animated mode state (v1: in-memory only, no persistence) ---
   const [mode, setMode] = useState<GraphMode>('static')
   const [animatedSpecs, setAnimatedSpecs] = useState<EquationSpec[]>([])
-  const animatedBuilt = useMemo(() => buildEquations(animatedSpecs), [animatedSpecs])
+  const animatedBuilt = useMemo(() => buildEquations(animatedSpecs, { angle: view.angle }), [animatedSpecs, view.angle])
   const animatedEquations = animatedBuilt.equations
   const [playing, setPlaying] = useState(true)
   const [drawTime, setDrawTime] = useState(0)
@@ -446,7 +461,8 @@ export default function App() {
           plane={activePlane}
           sigma={sigma}
           component={component}
-          theme={theme}
+          theme={`${theme}|${view.palette}`}
+          view={view}
           defRaws={animated ? animatedBuilt.defRaws : built.defRaws}
           analysis={animated ? undefined : analysis}
           onSnap={setSnapX}
@@ -480,12 +496,17 @@ export default function App() {
               { key: 'points', label: 'points', title: 'mark roots, extrema, inflections, intersections', active: analysis.points },
               { key: 'tangent', label: 'tangent', title: 'tangent line at the cursor', active: analysis.tangent },
               { key: 'table', label: 'table', title: 'table of values', active: tableOpen },
+              { key: 'view', label: 'view', title: 'grid, axes, scales, angles, palette', active: viewOpen },
             ]}
             onToggle={(key) => {
               if (key === 'table') setTableOpen((prev) => !prev)
+              else if (key === 'view') setViewOpen((prev) => !prev)
               else setAnalysis((prev) => ({ ...prev, [key]: !prev[key as 'points' | 'tangent'] }))
             }}
           />
+        )}
+        {!animated && activePlane === 'xy' && viewOpen && (
+          <ViewPanel view={view} onChange={changeView} onClose={() => setViewOpen(false)} />
         )}
         {!animated && tableOpen && <ValueTable equations={plotted} onClose={() => setTableOpen(false)} />}
         {activeEquations.length === 0 && <EmptyGraph />}

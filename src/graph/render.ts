@@ -1,7 +1,8 @@
 import { slopeAt, type Feature } from './analysis'
 import type { GraphColors } from './color'
+import type { ViewSettings } from './view'
 import type { AreaInfo, CurveSamples, EvaluateFn, LineDash, Viewport } from './types'
-import { formatNumber, formatTick, niceStep, screenToWorldX, screenToWorldY, worldToScreenX, worldToScreenY } from './viewport'
+import { formatNumber, formatTick, niceStep, screenToWorldX, screenToWorldY, worldToScreenX, worldToScreenY, yScale } from './viewport'
 
 export interface RenderCurve {
   id: string
@@ -45,7 +46,11 @@ export interface RenderState {
   features?: Feature[]
   /** Draw the tangent line of each curve at the hover x. */
   tangent?: boolean
+  /** Grid/axes visibility, custom grid step and labels, log axes. */
+  view?: RenderView
 }
+
+export type RenderView = Pick<ViewSettings, 'grid' | 'axes' | 'gridStep' | 'logX' | 'logY' | 'xLabel' | 'yLabel'>
 
 export const ZERO_TS = [14.1347, 21.022, 25.0109]
 
@@ -53,109 +58,158 @@ const MONO_FONT = '"Geist Mono Variable", ui-monospace, monospace'
 const MAX_MINOR_LINES = 4000
 const MAX_LABELS = 400
 
-function drawGrid(
-  ctx: CanvasRenderingContext2D,
-  state: RenderState,
-  step: number,
-  color: string
-): void {
-  const { width, height, viewport: vp, dpr } = state
+/** Major tick step for one axis: fixed by the user, decades on log axes, else from zoom. */
+function majorStep(scale: number, log: boolean, fixed: number | null | undefined): number {
+  const auto = niceStep(scale)
+  if (log) return Math.max(1, Math.round(auto))
+  if (fixed && fixed > 0) {
+    // Keep a fixed step readable: double it until majors are >= 16px apart.
+    let step = fixed
+    while (step * scale < 16) step *= 2
+    return step
+  }
+  return auto
+}
+
+interface AxisSteps {
+  x: number
+  y: number
+}
+
+function axisSteps(state: RenderState): AxisSteps {
+  const vp = state.viewport
+  const view = state.view
+  return {
+    x: majorStep(vp.scale, Boolean(view?.logX), view?.gridStep),
+    y: majorStep(yScale(vp), Boolean(view?.logY), view?.gridStep),
+  }
+}
+
+/** World positions of grid lines on one axis between lo and hi. */
+function gridLines(lo: number, hi: number, step: number, logMinor: boolean, pixelsPerDecade: number): number[] {
+  const out: number[] = []
+  if (logMinor) {
+    // Log minors at log10(k) inside each decade, only when decades are wide enough.
+    if (pixelsPerDecade < 60) return out
+    for (let n = Math.floor(lo); n <= Math.ceil(hi); n++) {
+      for (let k = 2; k <= 9; k++) {
+        const v = n + Math.log10(k)
+        if (v >= lo && v <= hi) out.push(v)
+      }
+    }
+    return out
+  }
+  if ((hi - lo) / step > MAX_MINOR_LINES / 2) return out
+  for (let i = Math.ceil(lo / step); i <= Math.floor(hi / step); i++) out.push(i * step)
+  return out
+}
+
+function drawGrid(ctx: CanvasRenderingContext2D, state: RenderState, steps: AxisSteps, minor: boolean, color: string): void {
+  const { width, height, viewport: vp, dpr, view } = state
   const crisp = (value: number) => Math.round(value * dpr) / dpr + 0.5 / dpr
   const xMin = screenToWorldX(vp, 0)
   const xMax = screenToWorldX(vp, width)
   const yMin = screenToWorldY(vp, height)
   const yMax = screenToWorldY(vp, 0)
-  const verticals = Math.ceil(xMax / step) - Math.ceil(xMin / step)
-  const horizontals = Math.ceil(yMax / step) - Math.ceil(yMin / step)
-  if (verticals + horizontals > MAX_MINOR_LINES) return
+  const logX = Boolean(view?.logX)
+  const logY = Boolean(view?.logY)
+  const xs = gridLines(xMin, xMax, minor ? steps.x / 5 : steps.x, minor && logX, vp.scale)
+  const ys = gridLines(yMin, yMax, minor ? steps.y / 5 : steps.y, minor && logY, yScale(vp))
 
   ctx.strokeStyle = color
   ctx.lineWidth = 1
   ctx.beginPath()
-  for (let i = Math.ceil(xMin / step); i <= Math.floor(xMax / step); i++) {
-    const sx = crisp(worldToScreenX(vp, i * step))
-    if (sx < -1 || sx > width + 1) continue
+  for (const x of xs) {
+    const sx = crisp(worldToScreenX(vp, x))
     ctx.moveTo(sx, 0)
     ctx.lineTo(sx, height)
   }
-  for (let i = Math.ceil(yMin / step); i <= Math.floor(yMax / step); i++) {
-    const sy = crisp(worldToScreenY(vp, i * step))
-    if (sy < -1 || sy > height + 1) continue
+  for (const y of ys) {
+    const sy = crisp(worldToScreenY(vp, y))
     ctx.moveTo(0, sy)
     ctx.lineTo(width, sy)
   }
   ctx.stroke()
 }
 
-function drawAxesAndLabels(ctx: CanvasRenderingContext2D, state: RenderState): void {
-  const { width, height, viewport: vp, colors, dpr } = state
+function tickText(value: number, step: number, log: boolean): string {
+  return log ? formatNumber(10 ** value, 4) : formatTick(value, step)
+}
+
+function drawAxesAndLabels(ctx: CanvasRenderingContext2D, state: RenderState, steps: AxisSteps): void {
+  const { width, height, viewport: vp, colors, dpr, view } = state
   const crisp = (value: number) => Math.round(value * dpr) / dpr + 0.5 / dpr
-  const axisY = worldToScreenY(vp, 0)
-  const axisX = worldToScreenX(vp, 0)
+  const showAxes = view?.axes ?? true
+  // Log axes have no zero line; ticks go along the edges.
+  const axisY = view?.logY ? -1 : worldToScreenY(vp, 0)
+  const axisX = view?.logX ? -1 : worldToScreenX(vp, 0)
   const yAxisVisible = axisX >= 0 && axisX <= width
   const xAxisVisible = axisY >= 0 && axisY <= height
 
-  ctx.strokeStyle = colors.axis
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  if (xAxisVisible) {
-    const y = crisp(axisY)
-    ctx.moveTo(0, y)
-    ctx.lineTo(width, y)
+  if (showAxes) {
+    ctx.strokeStyle = colors.axis
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    if (xAxisVisible) {
+      const y = crisp(axisY)
+      ctx.moveTo(0, y)
+      ctx.lineTo(width, y)
+    }
+    if (yAxisVisible) {
+      const x = crisp(axisX)
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, height)
+    }
+    ctx.stroke()
+
+    const xMin = screenToWorldX(vp, 0)
+    const xMax = screenToWorldX(vp, width)
+    const yMin = screenToWorldY(vp, height)
+    const yMax = screenToWorldY(vp, 0)
+
+    ctx.font = `11px ${MONO_FONT}`
+    ctx.fillStyle = colors.label
+
+    const xLabelY = xAxisVisible ? axisY + 5 : height - 7 - 11
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    let labels = 0
+    for (let i = Math.ceil(xMin / steps.x); i <= Math.floor(xMax / steps.x) && labels < MAX_LABELS; i++) {
+      const value = i * steps.x
+      const sx = worldToScreenX(vp, value)
+      if (sx < 26 || sx > width - 26) continue
+      if (yAxisVisible && Math.abs(sx - axisX) < 18) continue
+      ctx.fillText(tickText(value, steps.x, Boolean(view?.logX)), sx, xLabelY)
+      labels++
+    }
+
+    const yLabelX = yAxisVisible ? axisX - 7 : 7
+    ctx.textAlign = yAxisVisible ? 'right' : 'left'
+    ctx.textBaseline = 'middle'
+    labels = 0
+    for (let i = Math.ceil(yMin / steps.y); i <= Math.floor(yMax / steps.y) && labels < MAX_LABELS; i++) {
+      const value = i * steps.y
+      const sy = worldToScreenY(vp, value)
+      if (sy < 8 || sy > height - 8) continue
+      if (xAxisVisible && Math.abs(sy - axisY) < 12) continue
+      ctx.fillText(tickText(value, steps.y, Boolean(view?.logY)), yLabelX, sy)
+      labels++
+    }
   }
-  if (yAxisVisible) {
-    const x = crisp(axisX)
-    ctx.moveTo(x, 0)
-    ctx.lineTo(x, height)
-  }
-  ctx.stroke()
 
-  const step = niceStep(vp.scale)
-  const xMin = screenToWorldX(vp, 0)
-  const xMax = screenToWorldX(vp, width)
-  const yMin = screenToWorldY(vp, height)
-  const yMax = screenToWorldY(vp, 0)
-
-  ctx.font = `11px ${MONO_FONT}`
-  ctx.fillStyle = colors.label
-
-  const xLabelY = xAxisVisible ? axisY + 5 : height - 7
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'top'
-  let labels = 0
-  for (let i = Math.ceil(xMin / step); i <= Math.floor(xMax / step) && labels < MAX_LABELS; i++) {
-    const value = i * step
-    const sx = worldToScreenX(vp, value)
-    if (sx < 26 || sx > width - 26) continue
-    if (yAxisVisible && Math.abs(sx - axisX) < 18) continue
-    ctx.fillText(formatTick(value, step), sx, xLabelY)
-    labels++
-  }
-
-  const yLabelX = yAxisVisible ? axisX - 7 : 7
-  ctx.textAlign = yAxisVisible ? 'right' : 'left'
-  ctx.textBaseline = 'middle'
-  labels = 0
-  for (let i = Math.ceil(yMin / step); i <= Math.floor(yMax / step) && labels < MAX_LABELS; i++) {
-    const value = i * step
-    const sy = worldToScreenY(vp, value)
-    if (sy < 8 || sy > height - 8) continue
-    if (xAxisVisible && Math.abs(sy - axisY) < 12) continue
-    ctx.fillText(formatTick(value, step), yLabelX, sy)
-    labels++
-  }
-
-  // Axis names (x vs t vs sigma vs Re).
+  // Axis names (x vs t vs sigma vs Re), overridden by custom labels.
   const names = state.labels
-  if (names) {
+  const xName = view?.xLabel || names?.x
+  const yName = view?.yLabel || names?.y
+  if (xName || yName) {
     ctx.fillStyle = colors.label
     ctx.font = `11px ${MONO_FONT}`
     ctx.textAlign = 'right'
     ctx.textBaseline = 'bottom'
-    ctx.fillText(names.x, width - 8, height - 8)
+    if (xName) ctx.fillText(xName, width - 8, height - 8)
     ctx.textAlign = 'left'
     ctx.textBaseline = 'top'
-    ctx.fillText(names.y, 8, 8)
+    if (yName) ctx.fillText(yName, 8, 8)
   }
 }
 
@@ -204,12 +258,14 @@ function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
     const cell = curve.samples.cell
     if (region && cell) {
       // One path for all shaded cells; +0.5px overlap hides seams between cells.
-      const size = cell * vp.scale + 0.5
+      const cellY = curve.samples.cellY ?? cell
+      const sizeX = cell * vp.scale + 0.5
+      const sizeY = cellY * yScale(vp) + 0.5
       ctx.fillStyle = color
       ctx.globalAlpha = 0.18
       ctx.beginPath()
       for (let k = 0; k < region.length; k += 2) {
-        ctx.rect(worldToScreenX(vp, region[k]), worldToScreenY(vp, region[k + 1] + cell), size, size)
+        ctx.rect(worldToScreenX(vp, region[k]), worldToScreenY(vp, region[k + 1] + cellY), sizeX, sizeY)
       }
       ctx.fill()
       ctx.globalAlpha = 1
@@ -553,7 +609,7 @@ function drawZeroMarkers(ctx: CanvasRenderingContext2D, state: RenderState): voi
 }
 
 export function drawGraph(ctx: CanvasRenderingContext2D, state: RenderState): void {
-  const { width, height, viewport: vp, colors, dpr } = state
+  const { width, height, colors, dpr } = state
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = colors.background
@@ -571,10 +627,12 @@ export function drawGraph(ctx: CanvasRenderingContext2D, state: RenderState): vo
     }
   }
 
-  const major = niceStep(vp.scale)
-  drawGrid(ctx, state, major / 5, colors.gridMinor)
-  drawGrid(ctx, state, major, colors.gridMajor)
-  drawAxesAndLabels(ctx, state)
+  const steps = axisSteps(state)
+  if (state.view?.grid ?? true) {
+    drawGrid(ctx, state, steps, true, colors.gridMinor)
+    drawGrid(ctx, state, steps, false, colors.gridMajor)
+  }
+  drawAxesAndLabels(ctx, state, steps)
   if (state.field) drawZeroMarkers(ctx, state)
   drawCurves(ctx, state)
   drawTangents(ctx, state)

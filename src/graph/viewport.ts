@@ -12,8 +12,13 @@ export function worldToScreenX(vp: Viewport, x: number): number {
   return vp.originX + x * vp.scale
 }
 
+/** Pixels per world unit on y. */
+export function yScale(vp: Viewport): number {
+  return vp.scaleY ?? vp.scale
+}
+
 export function worldToScreenY(vp: Viewport, y: number): number {
-  return vp.originY - y * vp.scale
+  return vp.originY - y * yScale(vp)
 }
 
 export function screenToWorldX(vp: Viewport, px: number): number {
@@ -21,17 +26,18 @@ export function screenToWorldX(vp: Viewport, px: number): number {
 }
 
 export function screenToWorldY(vp: Viewport, py: number): number {
-  return (vp.originY - py) / vp.scale
+  return (vp.originY - py) / yScale(vp)
 }
 
-export function zoomAt(vp: Viewport, px: number, py: number, factor: number): void {
-  const next = clampScale(vp.scale * factor)
-  if (next === vp.scale) return
+/** Zoom around a screen point. `axis` limits the zoom to one axis (free aspect only). */
+export function zoomAt(vp: Viewport, px: number, py: number, factor: number, axis: 'both' | 'x' | 'y' = 'both'): void {
   const worldX = screenToWorldX(vp, px)
   const worldY = screenToWorldY(vp, py)
-  vp.scale = next
-  vp.originX = px - worldX * next
-  vp.originY = py + worldY * next
+  if (axis !== 'both' && vp.scaleY === undefined) vp.scaleY = vp.scale
+  if (axis !== 'y') vp.scale = clampScale(vp.scale * factor)
+  if (axis !== 'x' && vp.scaleY !== undefined) vp.scaleY = clampScale(vp.scaleY * factor)
+  vp.originX = px - worldX * vp.scale
+  vp.originY = py + worldY * yScale(vp)
 }
 
 export function panBy(vp: Viewport, dx: number, dy: number): void {
@@ -47,12 +53,16 @@ export function resetViewport(width: number, height: number): Viewport {
   }
 }
 
-export function fitViewportY(vp: Viewport, yMin: number, yMax: number, height: number): Viewport {
+/** Fit [yMin, yMax] vertically. With a free aspect only the y scale changes. */
+export function fitViewportY(vp: Viewport, yMin: number, yMax: number, height: number, freeAspect = false): Viewport {
   const span = yMax - yMin
   const padding = height * 0.15
   const usable = Math.max(height - padding * 2, 1)
   const scale = clampScale(usable / Math.max(span, 1e-9))
   const mid = (yMin + yMax) / 2
+  if (freeAspect) {
+    return { scale: vp.scale, scaleY: scale, originX: vp.originX, originY: height / 2 + mid * scale }
+  }
   return {
     scale,
     originX: vp.originX,
@@ -138,10 +148,15 @@ export function tweenViewport(
     const elapsed = now - start
     const t = Math.min(1, elapsed / duration)
     const e = easeInOutCubic(t)
+    const fromY = fromCopy.scaleY ?? fromCopy.scale
+    const toY = to.scaleY ?? to.scale
+    const free = fromCopy.scaleY !== undefined || to.scaleY !== undefined
     onUpdate({
       scale: fromCopy.scale + (to.scale - fromCopy.scale) * e,
       originX: fromCopy.originX + (to.originX - fromCopy.originX) * e,
       originY: fromCopy.originY + (to.originY - fromCopy.originY) * e,
+      // Settle on the target's own form (undefined = equal aspect) at the end.
+      ...(free && t < 1 ? { scaleY: fromY + (toY - fromY) * e } : to.scaleY !== undefined ? { scaleY: to.scaleY } : {}),
     })
     if (t < 1) {
       raf = requestAnimationFrame(step)

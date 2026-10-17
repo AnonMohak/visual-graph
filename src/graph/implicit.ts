@@ -1,5 +1,5 @@
 import type { CurveSamples, Relation, Segment, Viewport } from './types'
-import { screenToWorldX, screenToWorldY } from './viewport'
+import { screenToWorldX, screenToWorldY, yScale } from './viewport'
 
 
 /** Corner values larger than this are treated as a pole, not a crossing. */
@@ -35,11 +35,12 @@ export function sampleImplicit(
   const nx = Math.ceil(width / cellPx) + 1
   const ny = Math.ceil(height / cellPx) + 1
   const cell = cellPx / vp.scale
+  const cellY = cellPx / yScale(vp)
   const x0 = screenToWorldX(vp, 0)
   const yTop = screenToWorldY(vp, 0)
   const values = new Float64Array(nx * ny)
   for (let j = 0; j < ny; j++) {
-    const wy = yTop - j * cell
+    const wy = yTop - j * cellY
     for (let i = 0; i < nx; i++) {
       const v = evaluateXY(x0 + i * cell, wy)
       values[j * nx + i] = v === null || !Number.isFinite(v) ? NaN : v
@@ -58,19 +59,19 @@ export function sampleImplicit(
       const br = values[(j + 1) * nx + i + 1]
       const bl = values[(j + 1) * nx + i]
       const cx = x0 + i * cell
-      const cy = yTop - j * cell
+      const cy = yTop - j * cellY
       if (shade) {
         const mid = (tl + tr + br + bl) / 4
-        if (Number.isFinite(mid) && holds(mid, relation)) region.push(cx, cy - cell)
+        if (Number.isFinite(mid) && holds(mid, relation)) region.push(cx, cy - cellY)
       }
       if (!Number.isFinite(tl + tr + br + bl)) continue
       if (Math.max(Math.abs(tl), Math.abs(tr), Math.abs(br), Math.abs(bl)) > POLE) continue
       const code = (tl > 0 ? 8 : 0) | (tr > 0 ? 4 : 0) | (br > 0 ? 2 : 0) | (bl > 0 ? 1 : 0)
       if (code === 0 || code === 15) continue
       const top: [number, number] = [cx + lerp(tl, tr) * cell, cy]
-      const right: [number, number] = [cx + cell, cy - lerp(tr, br) * cell]
-      const bottom: [number, number] = [cx + lerp(bl, br) * cell, cy - cell]
-      const left: [number, number] = [cx, cy - lerp(tl, bl) * cell]
+      const right: [number, number] = [cx + cell, cy - lerp(tr, br) * cellY]
+      const bottom: [number, number] = [cx + lerp(bl, br) * cell, cy - cellY]
+      const left: [number, number] = [cx, cy - lerp(tl, bl) * cellY]
       const lines: [number, number][][] = []
       switch (code) {
         case 1:
@@ -114,5 +115,6 @@ export function sampleImplicit(
     hasPoints: segments.length > 0 || region.length > 0,
     region: shade ? Float64Array.from(region) : undefined,
     cell,
+    cellY,
   }
 }

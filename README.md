@@ -116,6 +116,23 @@ The toolbar under the theme switch (xy plane) has three toggles:
 - **table**: show a table of x and f(x) for a curve, with your own range and
   step.
 
+## View settings
+
+Click **view** in the toolbar (xy plane) to open the view settings. They
+are saved in the browser.
+
+- **grid** and **axes** show or hide the grid and the axes with tick labels.
+- **grid step** sets a fixed major grid spacing (empty = automatic).
+- **x label** and **y label** set custom axis titles.
+- **log x** and **log y** use logarithmic axes. Tick labels show the data
+  values (1, 10, 100, ...).
+- **equal aspect** off lets the axes scale independently: `f` fits y only,
+  Shift+wheel zooms y, and Alt+wheel zooms x.
+- **angles** switches trig functions between radians and degrees (xy plane).
+- **palette**: default, high contrast, or colorblind-safe (Okabe-Ito).
+
+The **paper** and **neon** buttons switch between a light and a dark theme.
+
 ## Navigating the canvas
 
 | Action                | How                              |

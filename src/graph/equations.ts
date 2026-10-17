@@ -1,4 +1,6 @@
+import { cos, cot, csc, sec, sin, tan, asin, acos, atan } from 'mathjs'
 import { parseEquation, type Env, type ParseSuccess } from './parse'
+import { degreeScope, type AngleUnit } from './view'
 import type { Equation, LineDash } from './types'
 
 /** Persisted part of an equation: what the user typed plus display options. */
@@ -37,8 +39,16 @@ function envSignature(env: Env): string {
  * Definitions can appear in any order: they are resolved in passes until
  * no new name resolves. Specs that still fail keep their text with an error.
  */
-export function buildEquations(specs: EquationSpec[]): BuildResult {
-  const env: Env = {}
+export interface BuildOptions {
+  angle?: AngleUnit
+}
+
+const RADIAN_TRIG = { sin, cos, tan, cot, sec, csc, asin, acos, atan } as unknown as Record<string, (v: unknown) => unknown>
+
+export function buildEquations(specs: EquationSpec[], options: BuildOptions = {}): BuildResult {
+  const angle = options.angle ?? 'rad'
+  // Degree mode: trig overrides live in the environment every equation sees.
+  const env: Env = angle === 'deg' ? degreeScope(RADIAN_TRIG) : {}
   const defRaws: string[] = []
   const resolved = new Map<string, ParseSuccess>()
   const definers = new Map<string, string>()
@@ -57,7 +67,7 @@ export function buildEquations(specs: EquationSpec[]): BuildResult {
       progress = true
     }
   }
-  const signature = envSignature(env)
+  const signature = `${angle}|${envSignature(env)}`
   const equations = specs.map((spec): Equation => {
     let parsed = resolved.get(spec.id)
     let error: string | undefined

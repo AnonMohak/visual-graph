@@ -71,12 +71,17 @@ export interface CurveSamples {
   region?: Float64Array
   /** Cell size in world units for `region`. */
   cell?: number
+  /** Cell height in world units (differs from cell with a free aspect). */
+  cellY?: number
 }
 
 export interface Viewport {
+  /** Pixels per world unit on x (and on y unless scaleY is set). */
   scale: number
   originX: number
   originY: number
+  /** Pixels per world unit on y when the aspect ratio is free. */
+  scaleY?: number
 }
 
 export function isComplexKind(kind: EquationKind): boolean {

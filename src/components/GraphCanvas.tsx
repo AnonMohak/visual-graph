@@ -16,6 +16,7 @@ import {
 import { resolveGraphColors, type GraphColors } from '@/graph/color'
 import { setZetaCoarse } from '@/graph/complex'
 import { findFeatures, findIntersections, type Feature } from '@/graph/analysis'
+import { DEFAULT_VIEW, toLog, transformForAxes, type ViewSettings } from '@/graph/view'
 import { computeFieldImage } from '@/graph/field'
 import { sampleImplicit } from '@/graph/implicit'
 import { drawField, drawGraph, drawParametric, type RenderCurve } from '@/graph/render'
@@ -35,6 +36,7 @@ import {
   screenToWorldX,
   screenToWorldY,
   tweenViewport,
+  yScale,
   zoomAt,
 } from '@/graph/viewport'
 import { cn } from '@/lib/utils'
@@ -82,6 +84,8 @@ interface GraphCanvasProps {
   analysis?: { points: boolean; tangent: boolean }
   /** Clicking a marked point snaps the readout to its x. */
   onSnap?: (x: number) => void
+  /** Grid, axes, labels, aspect and log-axis settings. */
+  view?: ViewSettings
 }
 
 const NO_ANALYSIS = { points: false, tangent: false }
@@ -150,7 +154,7 @@ function viewSignature(
     return `anim|${extra.plane}|${extra.sigma}|${extra.component}|${Math.round(vp.scale * 10)}|${height}|${spacing}|${quantizeHead(head)}`
   }
   const bounds = sampleBounds(vp, width)
-  return `${extra.plane}|${extra.sigma}|${extra.component}|${Math.round(vp.scale * 10)}|${bounds.b0}|${bounds.b1}|${height}|${spacing}|static`
+  return `${extra.plane}|${extra.sigma}|${extra.component}|${Math.round(vp.scale * 10)}|${vp.scaleY ? Math.round(vp.scaleY * 10) : ''}|${bounds.b0}|${bounds.b1}|${height}|${spacing}|static`
 }
 
 export function GraphCanvas({
@@ -172,6 +176,7 @@ export function GraphCanvas({
   defRaws = [],
   analysis = NO_ANALYSIS,
   onSnap,
+  view = DEFAULT_VIEW,
 }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fieldCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -190,9 +195,14 @@ export function GraphCanvas({
   const pointersRef = useRef(new Map<number, { x: number; y: number }>())
   const pinchRef = useRef<{ dist: number; cx: number; cy: number } | null>(null)
   const draggingRef = useRef(false)
-  const equationsRef = useRef(equations.filter((eq) => eq.plot))
+  const plottable = (list: Equation[], settings: ViewSettings, pl: Plane) =>
+    list
+      .filter((eq) => eq.plot)
+      .map((eq) => (pl === 'xy' ? transformForAxes(eq, settings.logX, settings.logY) : eq))
+  const equationsRef = useRef(plottable(equations, view, plane))
   const defRawsRef = useRef(defRaws)
   const analysisRef = useRef(analysis)
+  const viewRef = useRef(view)
   const onSnapRef = useRef(onSnap)
   const featuresRef = useRef<{ sig: string; features: Feature[] }>({ sig: '', features: [] })
   const pressRef = useRef<{ x: number; y: number } | null>(null)
@@ -377,7 +387,7 @@ export function GraphCanvas({
               samples: sampleParametric(equation.evaluateComplex, sigmaRef.current, { tMin, tMax }, {
                 heightPx: h,
                 scaleX: vp.scale,
-                scaleY: vp.scale,
+                scaleY: yScale(vp),
                 spacingPx: spacing,
               }),
             }
@@ -402,7 +412,7 @@ export function GraphCanvas({
             samples: sampleParametric(equation.evaluateComplex, sigmaRef.current, { tMin, tMax }, {
               heightPx: h,
               scaleX: vp.scale,
-              scaleY: vp.scale,
+              scaleY: yScale(vp),
               spacingPx: spacing,
             }),
           }
@@ -433,7 +443,7 @@ export function GraphCanvas({
       if (equation.evaluateXY && equation.relation) {
         // Grid sampling depends on the whole view, so the key includes the origin.
         const cellPx = spacing === COARSE_SPACING ? 8 : 4
-        const sig = `imp|${vp.scale}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${cellPx}|${equation.id}|${equation.rev}`
+        const sig = `imp|${vp.scale}|${vp.scaleY}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${h}|${cellPx}|${equation.id}|${equation.rev}`
         let entry = cache.get(equation.id)
         if (!entry || entry.sig !== sig) {
           entry = { sig, samples: sampleImplicit(equation.evaluateXY, equation.relation, vp, w, h, cellPx) }
@@ -459,7 +469,7 @@ export function GraphCanvas({
             samples: samplePoints(equation.evaluatePoint, { tMin, tMax }, {
               heightPx: h,
               scaleX: vp.scale,
-              scaleY: vp.scale,
+              scaleY: yScale(vp),
               steps: spacing === COARSE_SPACING ? 1000 : 3000,
             }),
           }
@@ -485,7 +495,7 @@ export function GraphCanvas({
               samples: sampleCurve(evaluate, drawRange, {
                 heightPx: h,
                 scaleX: vp.scale,
-                scaleY: vp.scale,
+                scaleY: yScale(vp),
                 spacingPx: spacing,
               }),
             }
@@ -507,7 +517,7 @@ export function GraphCanvas({
             samples: sampleCurve(evaluate, bounds, {
               heightPx: h,
               scaleX: vp.scale,
-              scaleY: vp.scale,
+              scaleY: yScale(vp),
               spacingPx: spacing,
             }),
           }
@@ -548,7 +558,7 @@ export function GraphCanvas({
               {
                 heightPx: h,
                 scaleX: vp.scale,
-                scaleY: vp.scale,
+                scaleY: yScale(vp),
                 spacingPx: spacing,
               }
             ),
@@ -577,7 +587,7 @@ export function GraphCanvas({
             {
               heightPx: h,
               scaleX: vp.scale,
-              scaleY: vp.scale,
+              scaleY: yScale(vp),
               spacingPx: spacing,
             }
           ),
@@ -605,12 +615,12 @@ export function GraphCanvas({
     const vp = viewportRef.current
     const real = new Set(equationsRef.current.filter((eq) => eq.kind === 'real').map((eq) => eq.id))
     const list = curves.filter((curve) => curve.visible && real.has(curve.id))
-    const sig = `${vp.scale}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${list
+    const sig = `${vp.scale}|${vp.scaleY}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${list
       .map((curve) => `${curve.id}:${equationsRef.current.find((eq) => eq.id === curve.id)?.rev}`)
       .join(',')}`
     if (featuresRef.current.sig === sig) return featuresRef.current.features
     // Accept |f| up to two pixels at a root: rejects sign flips across poles.
-    const tolerance = 2 / vp.scale
+    const tolerance = 2 / yScale(vp)
     const xMin = screenToWorldX(vp, 0)
     const xMax = screenToWorldX(vp, w)
     const features: Feature[] = []
@@ -793,7 +803,8 @@ export function GraphCanvas({
       features,
       tangent: pl === 'xy' && analysisRef.current.tangent,
       hover: disableHoverRef.current ? null : hoverScreenRef.current,
-      snapX: snapRef.current,
+      snapX: snapRef.current === null ? null : pl === 'xy' && viewRef.current.logX ? toLog(snapRef.current) : snapRef.current,
+      view: pl === 'xy' ? viewRef.current : { ...viewRef.current, logX: false, logY: false },
       labels,
       sigmaRef: pl === 'reim' ? sigmaRef.current : null,
       disableHover: disableHoverRef.current,
@@ -829,7 +840,7 @@ export function GraphCanvas({
     cancelTween()
     const from = { ...viewportRef.current }
     // Snap when already there to avoid a 500ms no-op.
-    if (from.scale === target.scale && from.originX === target.originX && from.originY === target.originY) {
+    if (from.scale === target.scale && from.scaleY === target.scaleY && from.originX === target.originX && from.originY === target.originY) {
       viewportInitializedRef.current = true
       markDirty()
       onDone?.()
@@ -871,9 +882,11 @@ export function GraphCanvas({
       if (text !== hoverTextRef.current) {
         hoverTextRef.current = text
         const pl = planeRef.current
+        // The readout works in data units; log axes plot log10 of them.
+        const logView = pl === 'xy' ? viewRef.current : null
         readoutStore.set({
-          hoverX: worldX,
-          hoverY: worldY,
+          hoverX: logView?.logX ? 10 ** worldX : worldX,
+          hoverY: logView?.logY ? 10 ** worldY : worldY,
           hoverZ: pl === 'st' ? { re: worldX, im: worldY } : null,
         })
       }
@@ -938,6 +951,19 @@ export function GraphCanvas({
     animateTo(dest)
   }
 
+  // Equal aspect on: drop the separate y scale.
+  useEffect(() => {
+    if (view.equalAspect && viewportRef.current.scaleY !== undefined) {
+      const vp = viewportRef.current
+      const centerY = screenToWorldY(vp, sizeRef.current.h / 2)
+      delete vp.scaleY
+      vp.originY = sizeRef.current.h / 2 + centerY * vp.scale
+      samplesRef.current.clear()
+      markDirty()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view.equalAspect])
+
   // Keep planeRef in sync when App drives the plane prop (e.g. share restore).
   useEffect(() => {
     if (planePropRef.current !== planeRef.current) {
@@ -969,7 +995,7 @@ export function GraphCanvas({
       reset()
       return
     }
-    animateTo(fitViewportY(viewportRef.current, min, max, h))
+    animateTo(fitViewportY(viewportRef.current, min, max, h, !viewRef.current.equalAspect))
   }
 
   useImperativeHandle(
@@ -1010,7 +1036,8 @@ export function GraphCanvas({
   )
 
   useEffect(() => {
-    equationsRef.current = equations.filter((eq) => eq.plot)
+    equationsRef.current = plottable(equations, view, plane)
+    viewRef.current = view
     defRawsRef.current = defRaws
     analysisRef.current = analysis
     onSnapRef.current = onSnap
@@ -1035,7 +1062,9 @@ export function GraphCanvas({
       const rect = canvas.getBoundingClientRect()
       const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 100 : 1
       const factor = Math.exp(-event.deltaY * unit * 0.0015)
-      zoomAt(viewportRef.current, event.clientX - rect.left, event.clientY - rect.top, factor)
+      // Free aspect: Shift zooms y only, Alt zooms x only.
+      const axis = viewRef.current.equalAspect ? 'both' : event.shiftKey ? 'y' : event.altKey ? 'x' : 'both'
+      zoomAt(viewportRef.current, event.clientX - rect.left, event.clientY - rect.top, factor, axis)
       markDirty()
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
@@ -1135,13 +1164,16 @@ export function GraphCanvas({
     let best: Feature | null = null
     let bestDist = 10
     for (const feature of featuresRef.current.features) {
-      const dist = Math.hypot(vp.originX + feature.x * vp.scale - point.x, vp.originY - feature.y * vp.scale - point.y)
+      const dist = Math.hypot(vp.originX + feature.x * vp.scale - point.x, vp.originY - feature.y * yScale(vp) - point.y)
       if (dist < bestDist) {
         bestDist = dist
         best = feature
       }
     }
-    if (best) onSnapRef.current?.(Number(best.x.toPrecision(10)))
+    if (best) {
+      const x = planeRef.current === 'xy' && viewRef.current.logX ? 10 ** best.x : best.x
+      onSnapRef.current?.(Number(x.toPrecision(10)))
+    }
   }
 
   const endPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
