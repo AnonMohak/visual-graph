@@ -134,6 +134,8 @@ vite.config.ts       # Vite + Tailwind + `@` alias config
 | `npm run build` | Typecheck (`tsc -b`) + production build |
 | `npm run preview` | Preview the production build locally |
 | `npm run lint`  | Lint with oxlint                       |
+| `npm test`      | Run unit tests (Vitest)                |
+| `npm run typecheck` | Typecheck only                     |
 
 ## Notes
 
