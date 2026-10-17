@@ -8,8 +8,8 @@ import type { CurveSamples, EvaluateFn, Segment } from './types'
  * Play-once + hold: on reaching xMax the graph freezes complete.
  */
 
-/** World units revealed per second. [-5,5] takes ~100s. Tune freely. */
-export const DRAW_UNITS_PER_SEC = 0.1
+/** World units revealed per second. [-5,5] takes ~200s. Tune freely. */
+export const DRAW_UNITS_PER_SEC = 0.05
 
 /** Fixed draw range for xy real curves (infinite both sides fallback). */
 export const DRAW_X_MIN = -5
