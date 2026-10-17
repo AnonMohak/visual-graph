@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ParamSlider } from '@/components/ParamSlider'
 import { sliderOf } from '@/graph/sliders'
 import { useCurveStatus } from '@/graph/store'
-import type { ComplexComponent, Equation } from '@/graph/types'
+import { isComplexKind, type ComplexComponent, type Equation } from '@/graph/types'
 import { CHART_CLASSES } from '@/lib/chart'
 import { cn } from '@/lib/utils'
 
@@ -97,7 +97,7 @@ export function Legend({ equations, onToggle, onDelete, onSetConst, className, s
                   </Tooltip>
                 </div>
                 <div className="flex flex-wrap gap-1 pl-[1.1rem] pt-0.5">
-                  {equation.kind !== 'real' && (
+                  {isComplexKind(equation.kind) && (
                     <>
                       <span className="rounded border border-primary/30 px-1 font-mono text-[10px] text-primary">
                         {equation.kind === 'complex-param' ? 'param' : component}

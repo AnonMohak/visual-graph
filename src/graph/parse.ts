@@ -1,6 +1,6 @@
 import { complex as mathComplex, parse as mathParse, type Complex } from 'mathjs'
 import { complexScopeExtras, resultToC, resultToComplex } from './complex'
-import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, Plane } from './types'
+import type { ComplexComponent, EquationKind, EvaluateComplexFn, EvaluateFn, EvaluatePointFn, Plane } from './types'
 
 /** User definitions visible to an expression: constants and functions by name. */
 export type Env = Record<string, unknown>
@@ -24,6 +24,8 @@ export interface ParseSuccess {
   latex: string
   evaluate: EvaluateFn
   evaluateComplex?: EvaluateComplexFn
+  evaluatePoint?: EvaluatePointFn
+  tRange?: [number, number]
   kind: EquationKind
   component: ComplexComponent
   sigma: number
@@ -86,7 +88,7 @@ const KNOWN_SYMBOLS = [
   'piecewise',
 ]
 
-const VARIABLE_NAMES = new Set(['pi', 'e', 'x', 'i', 's', 'z', 't'])
+const VARIABLE_NAMES = new Set(['pi', 'e', 'x', 'i', 's', 'z', 't', 'theta'])
 const FUNCTION_NAMES = new Set(KNOWN_SYMBOLS.filter((name) => !VARIABLE_NAMES.has(name)))
 const RESERVED = new Set([...KNOWN_SYMBOLS, 'y', 'r', 'theta'])
 
@@ -159,6 +161,7 @@ function normalize(input: string): Normalized {
     else if (ch === '²') push('^2', i)
     else if (ch === '³') push('^3', i)
     else if (ch === 'π') push('pi', i)
+    else if (ch === 'θ') push('theta', i)
     else push(ch, i)
   }
   const text = chars.join('')
@@ -413,6 +416,104 @@ function toTexSafe(expr: string, fallback: string): string {
   }
 }
 
+/** Index of the comma splitting `(a, b)` at the top level, or -1. */
+function tupleComma(expr: string): number {
+  if (!expr.startsWith('(') || !expr.endsWith(')')) return -1
+  let depth = 0
+  let comma = -1
+  for (let k = 0; k < expr.length; k++) {
+    const ch = expr[k]
+    if (ch === '(' || ch === '[') depth++
+    else if (ch === ')' || ch === ']') {
+      depth--
+      if (depth === 0 && k < expr.length - 1) return -1
+    } else if (ch === ',' && depth === 1) {
+      if (comma !== -1) return -1
+      comma = k
+    }
+  }
+  return comma
+}
+
+function isTuple(expr: string): boolean {
+  return tupleComma(expr) !== -1
+}
+
+const TWO_PI = 2 * Math.PI
+
+/** Parametric `(x(t), y(t))` for t in [0, 2π], or polar `r = f(θ)` for θ in [0, 2π]. */
+function parseCurve(raw: string, src: Normalized, env: Env): ParseResult {
+  const polar = src.expr.startsWith('r=')
+  const parts: Normalized[] = []
+  if (polar) {
+    parts.push({ expr: src.expr.slice(2), map: src.map.slice(2) })
+  } else {
+    const comma = tupleComma(src.expr)
+    parts.push({ expr: src.expr.slice(1, comma), map: src.map.slice(1, comma) })
+    parts.push({ expr: src.expr.slice(comma + 1, -1), map: src.map.slice(comma + 1, -1) })
+  }
+  const variable = polar ? 'theta' : 't'
+  const extras = { ...complexScopeExtras(), piecewise }
+  try {
+    const compiled = parts.map((part) => {
+      if (!part.expr) throw new Error('Value expected')
+      const implicit = insertImplicit(part, env, [variable])
+      const balance = balanceCheck(implicit.expr, raw, implicit.map)
+      if (balance) throw balance
+      return { node: mathParse(implicit.expr), map: implicit.map }
+    })
+    const fns = compiled.map(({ node }) => node.compile())
+    const at = (fn: (typeof fns)[number], value: number): number | null => {
+      try {
+        const v = fn.evaluate({ pi: Math.PI, e: Math.E, ...extras, ...env, [variable]: value })
+        return finiteReal(v) ? v : null
+      } catch {
+        return null
+      }
+    }
+    const evaluatePoint: EvaluatePointFn = polar
+      ? (theta) => {
+          const r = at(fns[0], theta)
+          return r === null ? null : [r * Math.cos(theta), r * Math.sin(theta)]
+        }
+      : (t) => {
+          const px = at(fns[0], t)
+          const py = at(fns[1], t)
+          return px === null || py === null ? null : [px, py]
+        }
+    // Surface real errors (unknown names) by evaluating once with throwing on.
+    let finite = false
+    for (const probe of [0.5, 1.3, 2.9, 4.1]) {
+      if (evaluatePoint(probe)) {
+        finite = true
+        break
+      }
+    }
+    if (!finite) {
+      for (const fn of fns) fn.evaluate({ pi: Math.PI, e: Math.E, ...extras, ...env, [variable]: 0.5 })
+      return { ok: false, raw, message: 'no finite points for t in [0, 2π]' }
+    }
+    const tex = compiled.map(({ node }) => node.toTex())
+    return {
+      ok: true,
+      plot: true,
+      raw,
+      expr: src.expr,
+      latex: polar ? `r=${tex[0]}` : `\left(${tex[0]},\ ${tex[1]}\right)`,
+      evaluate: () => null,
+      evaluatePoint,
+      tRange: [0, TWO_PI],
+      kind: polar ? 'polar' : 'parametric',
+      component: 're',
+      sigma: 0.5,
+      suggestedPlane: 'xy',
+    }
+  } catch (err) {
+    if (err && typeof err === 'object' && 'ok' in err) return err as ParseFailure
+    return friendlyError(err, raw, src.map)
+  }
+}
+
 export function parseEquation(input: string, env: Env = {}): ParseResult {
   const result = parseInner(input, env)
   if (!result.ok && result.freeSymbols === undefined) {
@@ -440,6 +541,9 @@ function parseInner(input: string, env: Env): ParseResult {
   const normalized = normalize(raw)
   if (!normalized.expr) {
     return { ok: false, raw, message: 'empty expression' }
+  }
+  if (/^r=/.test(normalized.expr) || isTuple(normalized.expr)) {
+    return parseCurve(raw, normalized, env)
   }
   const head = definitionHead(normalized.expr)
   if (head && RESERVED.has(head.name)) {

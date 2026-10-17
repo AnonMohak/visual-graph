@@ -17,9 +17,9 @@ import { resolveGraphColors, type GraphColors } from '@/graph/color'
 import { setZetaCoarse } from '@/graph/complex'
 import { computeFieldImage } from '@/graph/field'
 import { drawField, drawGraph, drawParametric, type RenderCurve } from '@/graph/render'
-import { sampleComplexSlice, sampleCurve, sampleParametric } from '@/graph/sampler'
+import { sampleComplexSlice, sampleCurve, sampleParametric, samplePoints } from '@/graph/sampler'
 import { readoutStore, statusStore } from '@/graph/store'
-import type { ComplexComponent, CurveSamples, Equation, Plane, Viewport } from '@/graph/types'
+import { isComplexKind, type ComplexComponent, type CurveSamples, type Equation, type Plane, type Viewport } from '@/graph/types'
 import { complex as mathComplex } from 'mathjs'
 import { resultToC } from '@/graph/complex'
 import {
@@ -220,7 +220,7 @@ export function GraphCanvas({
   }
 
   const complexEquations = (list: Equation[]) =>
-    list.filter((eq) => eq.kind !== 'real' && eq.evaluateComplex)
+    list.filter((eq) => isComplexKind(eq.kind) && eq.evaluateComplex)
 
   const resolveFieldEq = (): Equation | null => {
     const list = equationsRef.current
@@ -416,6 +416,31 @@ export function GraphCanvas({
     const drawRange = animated ? { xMin: DRAW_X_MIN, xMax: DRAW_X_MAX } : bounds
     const list = equationsRef.current.map((equation) => {
       active.add(equation.id)
+      if (equation.evaluatePoint) {
+        const [tMin, tMax] = equation.tRange ?? [0, 2 * Math.PI]
+        const sig = `pts|${Math.round(vp.scale * 10)}|${h}|${equation.id}|${equation.rev}`
+        let entry = cache.get(equation.id)
+        if (!entry || entry.sig !== sig) {
+          entry = {
+            sig,
+            samples: samplePoints(equation.evaluatePoint, { tMin, tMax }, {
+              heightPx: h,
+              scaleX: vp.scale,
+              scaleY: vp.scale,
+              steps: spacing === COARSE_SPACING ? 1000 : 3000,
+            }),
+          }
+          cache.set(equation.id, entry)
+        }
+        status[equation.id] = entry.samples.hasPoints
+        return {
+          id: equation.id,
+          colorIndex: equation.colorToken,
+          visible: equation.visible,
+          samples: animated ? clipParametricByProgress(entry.samples, progress) : entry.samples,
+          evaluate: equation.evaluate,
+        }
+      }
       if (equation.kind === 'real') {
         const evaluate = equation.evaluate
         if (animated && fullBase) {
@@ -686,7 +711,7 @@ export function GraphCanvas({
       return
     }
     const curves = buildCurves(spacing)
-    const labels = pl === 'reim' ? { x: 'Re', y: 'Im' } : equationsRef.current.some((e) => e.kind !== 'real')
+    const labels = pl === 'reim' ? { x: 'Re', y: 'Im' } : equationsRef.current.some((e) => e.kind === 'complex-slice' || e.kind === 'complex-param')
       ? { x: 't', y: 'y' }
       : { x: 'x', y: 'y' }
     const base = {
@@ -1065,7 +1090,7 @@ export function GraphCanvas({
     : ((stComplexes.find((eq) => eq.visible) ?? stComplexes[0])?.id ?? null)
   // Keep selection valid when equations change (fallback zeta = null).
   useEffect(() => {
-    if (fieldSourceId && !equations.some((eq) => eq.id === fieldSourceId && eq.kind !== 'real')) {
+    if (fieldSourceId && !equations.some((eq) => eq.id === fieldSourceId && isComplexKind(eq.kind))) {
       setFieldSourceId(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

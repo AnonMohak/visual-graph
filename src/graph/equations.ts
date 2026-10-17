@@ -86,6 +86,8 @@ export function buildEquations(specs: EquationSpec[]): BuildResult {
       latex: parsed.latex,
       evaluate: parsed.evaluate,
       evaluateComplex: parsed.evaluateComplex,
+      evaluatePoint: parsed.evaluatePoint,
+      tRange: parsed.tRange,
       kind: parsed.kind,
       component: parsed.component,
       sigma: parsed.sigma,

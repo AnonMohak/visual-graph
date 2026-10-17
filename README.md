@@ -43,6 +43,8 @@ Tips:
 - Sliders: unknown single letters become parameters. `a*sin(b*x)` adds
   `a = 1` and `b = 1` with sliders in the legend. Press play to sweep a
   value; the loop button bounces it back and forth.
+- Parametric curves: `(cos(t), sin(t))` draws t from 0 to 2π.
+- Polar curves: `r = 1 + cos(θ)` (or `theta`) draws θ from 0 to 2π.
 - Piecewise: `x < 0 ? -x : x^2` or `piecewise(x < 0, -x, x^2)`.
 - Invalid input shows an inline error and moves the cursor to the problem
   spot; nothing is added until it parses.

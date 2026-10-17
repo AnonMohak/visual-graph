@@ -4,7 +4,10 @@ export type EvaluateFn = (x: number) => number | null
 export type EvaluateComplexFn = (s: Complex) => Complex | null
 
 export type Plane = 'xy' | 'st' | 'reim'
-export type EquationKind = 'real' | 'complex-slice' | 'complex-param'
+export type EquationKind = 'real' | 'complex-slice' | 'complex-param' | 'parametric' | 'polar'
+
+/** Parametric/polar point at parameter t (polar: t is θ). */
+export type EvaluatePointFn = (t: number) => [number, number] | null
 export type ComplexComponent = 're' | 'im' | 'abs' | 'arg'
 
 export interface Equation {
@@ -13,6 +16,9 @@ export interface Equation {
   latex: string
   evaluate: EvaluateFn
   evaluateComplex?: EvaluateComplexFn
+  evaluatePoint?: EvaluatePointFn
+  /** Parameter range for parametric/polar curves. */
+  tRange?: [number, number]
   kind: EquationKind
   component?: ComplexComponent
   sigma?: number
@@ -45,4 +51,8 @@ export interface Viewport {
   scale: number
   originX: number
   originY: number
+}
+
+export function isComplexKind(kind: EquationKind): boolean {
+  return kind === 'complex-slice' || kind === 'complex-param'
 }

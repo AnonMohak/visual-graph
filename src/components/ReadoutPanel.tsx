@@ -4,7 +4,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { Separator } from '@/components/ui/separator'
 import { resultToC } from '@/graph/complex'
 import { useReadout } from '@/graph/store'
-import type { ComplexComponent, Equation, Plane } from '@/graph/types'
+import { isComplexKind, type ComplexComponent, type Equation, type Plane } from '@/graph/types'
 import { formatNumber } from '@/graph/viewport'
 import { CHART_CLASSES } from '@/lib/chart'
 import { cn } from '@/lib/utils'
@@ -127,7 +127,7 @@ export function ReadoutPanel({
         </div>
         {equations.length === 0 && <div className="text-xs text-muted-foreground/70">field: ζ(s)</div>}
         {equations.map((equation) => {
-          if (equation.kind === 'real' || !s) {
+          if (!isComplexKind(equation.kind) || !s) {
             return <ReadoutRow key={equation.id} equation={equation} value={null} />
           }
           const d = complexDetails(equation, s.re, s.im)
@@ -179,7 +179,7 @@ export function ReadoutPanel({
 
   // --- xy plane (+ slices): y(x), slice shows t,Re,Im,|.|,arg ---
   const hoverLabel = hasHover ? `x=${formatNumber(hoverX, 4)}` : '—'
-  const anyComplex = equations.some((e) => e.kind !== 'real')
+  const anyComplex = equations.some((e) => isComplexKind(e.kind))
 
   return (
     <div
@@ -197,7 +197,7 @@ export function ReadoutPanel({
           <div className="text-xs text-muted-foreground/70">no equations yet</div>
         ) : (
           equations.map((equation) => {
-            if (equation.kind === 'real') {
+            if (!isComplexKind(equation.kind)) {
               return (
                 <ReadoutRow
                   key={equation.id}
@@ -262,7 +262,7 @@ export function ReadoutPanel({
         </div>
         {snapX !== null &&
           equations.map((equation) => {
-            if (equation.kind === 'real') {
+            if (!isComplexKind(equation.kind)) {
               return (
                 <ReadoutRow key={equation.id} equation={equation} value={equation.evaluate(snapX)} accent />
               )

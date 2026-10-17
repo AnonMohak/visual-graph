@@ -1,6 +1,6 @@
 import { complex as mathComplex } from 'mathjs'
 import { resultToC } from './complex'
-import type { ComplexComponent, CurveSamples, EvaluateComplexFn, EvaluateFn, Segment } from './types'
+import type { ComplexComponent, CurveSamples, EvaluateComplexFn, EvaluateFn, EvaluatePointFn, Segment } from './types'
 
 export interface SampleRange {
   xMin: number
@@ -174,6 +174,45 @@ export function sampleParametric(
     ys.push(cy)
     prevX = cx
     prevY = cy
+  }
+  flush()
+  return { segments, hasPoints }
+}
+
+/**
+ * Sample a 2D curve t -> (x, y). Uses a fixed number of steps over the
+ * parameter range and splits where a step jumps farther than jumpFactor * height.
+ */
+export function samplePoints(
+  evaluatePoint: EvaluatePointFn,
+  range: ParametricRange,
+  opts: SampleOptions & { steps?: number }
+): CurveSamples {
+  const count = Math.max(2, opts.steps ?? 2000)
+  const step = (range.tMax - range.tMin) / (count - 1)
+  const jumpThreshold = opts.heightPx * (opts.jumpFactor ?? DEFAULT_JUMP_FACTOR)
+  const segments: Segment[] = []
+  let xs: number[] = []
+  let ys: number[] = []
+  let hasPoints = false
+  const flush = () => {
+    if (xs.length >= 2) {
+      segments.push({ xs: Float64Array.from(xs), ys: Float64Array.from(ys) })
+      hasPoints = true
+    }
+    xs = []
+    ys = []
+  }
+  for (let k = 0; k < count; k++) {
+    const p = evaluatePoint(range.tMin + step * k)
+    if (!p || !Number.isFinite(p[0]) || !Number.isFinite(p[1])) {
+      flush()
+      continue
+    }
+    const n = xs.length
+    if (n && Math.hypot((p[0] - xs[n - 1]) * opts.scaleX, (p[1] - ys[n - 1]) * opts.scaleY) > jumpThreshold) flush()
+    xs.push(p[0])
+    ys.push(p[1])
   }
   flush()
   return { segments, hasPoints }

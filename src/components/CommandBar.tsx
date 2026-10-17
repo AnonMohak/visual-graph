@@ -16,7 +16,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { Kbd } from '@/components/ui/kbd'
 import { type Env, type ParseFailure } from '@/graph/parse'
 import { parseWithSliders } from '@/graph/sliders'
-import type { ComplexComponent, Plane } from '@/graph/types'
+import { isComplexKind, type ComplexComponent, type Plane } from '@/graph/types'
 import { cn } from '@/lib/utils'
 
 const SAMPLES: { label: string; plane: Plane }[] = [
@@ -102,7 +102,7 @@ export function CommandBar({
   }
 
   const preview = useMemo(() => (value.trim() ? parseWithSliders(value, env) : null), [value, env])
-  const previewComplex = preview && preview.ok && preview.kind !== 'real'
+  const previewComplex = preview && preview.ok && isComplexKind(preview.kind)
 
   const placeholder =
     activePlane === 'st' ? 'zeta(s)' : activePlane === 'reim' ? 'zeta(0.5+i*t)' : 'y = sin(x)/x'
