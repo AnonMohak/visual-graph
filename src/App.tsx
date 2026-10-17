@@ -24,6 +24,7 @@ import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/
 import { initHistory, record, redo, undo } from '@/graph/history'
 import { formatSliderValue, sliderOf, sliderRange } from '@/graph/sliders'
 import { downloadBlob, graphFromJson, graphToJson } from '@/graph/library'
+import { pitchTrack, playTrack } from '@/graph/sonify'
 import {
   decodeShareHash,
   decodeShareState,
@@ -488,6 +489,21 @@ export default function App() {
     if (state.vp) graphRef.current?.setViewport(shareVpToViewport(state.vp))
   }
 
+  /** Sonify the first visible y = f(x) curve across the current view. */
+  const listen = () => {
+    const curve = plotted.find((eq) => eq.visible && eq.kind === 'real')
+    const vp = graphRef.current?.getViewport()
+    const canvas = graphRef.current?.getCanvas()
+    if (!curve || !vp || !canvas) return
+    const { width, height } = canvas.getBoundingClientRect()
+    const sy = vp.scaleY ?? vp.scale
+    const xMin = -vp.originX / vp.scale
+    const xMax = (width - vp.originX) / vp.scale
+    const yMax = vp.originY / sy
+    const yMin = (vp.originY - height) / sy
+    playTrack(pitchTrack(curve.evaluate, xMin, xMax, yMin, yMax, 240))
+  }
+
   const exportImage = async (kind: 'png' | 'svg') => {
     const blob = await graphRef.current?.exportImage(kind)
     if (blob) downloadBlob(blob, `graph.${kind}`)
@@ -669,9 +685,11 @@ export default function App() {
               { key: 'table', label: 'table', title: 'table of values', active: tableOpen },
               { key: 'view', label: 'view', title: 'grid, axes, scales, angles, palette', active: viewOpen },
               { key: 'data', label: 'data', title: 'paste data, fit a regression', active: dataOpen },
+              { key: 'listen', label: 'listen', title: 'play the first visible curve as sound (low = bottom, high = top)', active: false },
             ]}
             onToggle={(key) => {
-              if (key === 'table') setTableOpen((prev) => !prev)
+              if (key === 'listen') listen()
+              else if (key === 'table') setTableOpen((prev) => !prev)
               else if (key === 'data') setDataOpen((prev) => !prev)
               else if (key === 'view') setViewOpen((prev) => !prev)
               else setAnalysis((prev) => ({ ...prev, [key]: !prev[key as 'points' | 'tangent'] }))

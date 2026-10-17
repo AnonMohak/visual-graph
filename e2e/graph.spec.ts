@@ -23,7 +23,7 @@ test('adds an equation to the legend', async ({ page }) => {
 test('shows a parse error and adds nothing', async ({ page }) => {
   await addEquation(page, 'sin(x')
   await expect(page.getByText('missing closing )')).toBeVisible()
-  await expect(page.getByText('curves')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'hide all' })).toHaveCount(0)
 })
 
 test('creates sliders for free parameters', async ({ page }) => {
@@ -36,7 +36,7 @@ test('undo removes the last equation', async ({ page }) => {
   await addEquation(page, 'x^2')
   await page.getByRole('textbox', { name: 'equation' }).blur()
   await page.keyboard.press('Control+z')
-  await expect(page.getByText('curves')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'hide all' })).toHaveCount(0)
 })
 
 test('share link restores the equations', async ({ page, context }) => {
@@ -70,4 +70,20 @@ test('embed mode hides the editing UI', async ({ page }) => {
   await page.goto('/?embed=1')
   await expect(page.getByRole('textbox', { name: 'equation' })).toHaveCount(0)
   await expect(page.getByText('open in Graph')).toBeVisible()
+})
+
+test('canvas is keyboard navigable and described for screen readers', async ({ page }) => {
+  await addEquation(page, 'x^2')
+  await canvas(page).focus()
+  const before = await canvas(page).screenshot()
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.press('+')
+  await expect.poll(async () => Buffer.compare(before, await canvas(page).screenshot())).not.toBe(0)
+  await expect(page.locator('#graph-description')).toContainText('x^2: y from')
+})
+
+test('ships a web app manifest and service worker', async ({ page, request }) => {
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest')
+  expect((await request.get('/manifest.webmanifest')).ok()).toBe(true)
+  expect((await request.get('/sw.js')).ok()).toBe(true)
 })

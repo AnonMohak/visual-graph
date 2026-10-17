@@ -1,0 +1,14 @@
+{
+  "name": "Graph — interactive function plotter",
+  "short_name": "Graph",
+  "description": "Plot functions, implicit curves, data and complex functions on an infinite canvas.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b100e",
+  "theme_color": "#0b100e",
+  "icons": [
+    { "src": "logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

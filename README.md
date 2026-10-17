@@ -258,7 +258,7 @@ src/
   components/        # canvas, legend, command bar, modals, UI
   graph/             # parsing, evaluation, viewport, sharing
   lib/               # helpers (utils, toasts)
-public/              # favicon, icons, logo
+public/              # favicon, icons, logo, PWA manifest, service worker
 index.html           # app entry
 vite.config.ts       # Vite + Tailwind + `@` alias config
 ```
@@ -274,6 +274,18 @@ vite.config.ts       # Vite + Tailwind + `@` alias config
 | `npm test`      | Run unit tests (Vitest)                |
 | `npm run typecheck` | Typecheck only                     |
 | `npm run e2e`   | Build and run Playwright E2E tests     |
+
+## Accessibility and offline use
+
+- **Keyboard on the canvas:** press `Tab` to focus the canvas, then use the
+  arrow keys to pan (Shift = larger steps) and `+` / `-` to zoom.
+- **Screen readers:** the canvas has a text description of the view and of
+  each visible curve (its y range in view), updated after you stop moving.
+- **listen** (toolbar, xy plane): plays the first visible curve as a tone
+  from left to right over 3 seconds. A higher pitch means a higher y; gaps
+  are silent.
+- **Install / offline:** the production build is a PWA. After the first
+  visit it works offline, and the browser can install it as an app.
 
 ## Tests and CI
 

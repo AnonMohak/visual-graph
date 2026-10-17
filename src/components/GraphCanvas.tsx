@@ -223,6 +223,8 @@ export function GraphCanvas({
   const featuresRef = useRef<{ sig: string; features: Feature[] }>({ sig: '', features: [] })
   const pressRef = useRef<{ x: number; y: number } | null>(null)
   const lastRenderRef = useRef<{ draw: (target: CanvasRenderingContext2D) => void } | null>(null)
+  const describeRef = useRef<HTMLDivElement | null>(null)
+  const describeTextRef = useRef<{ pending: string; timer: number | null }>({ pending: '', timer: null })
   const snapRef = useRef(snapX)
   const drawTimeRef = useRef(drawTime)
   const unitsPerSecRef = useRef(unitsPerSec)
@@ -681,6 +683,46 @@ export function GraphCanvas({
     return features
   }
 
+  /** Text summary of the view for screen readers (written to the DOM only when it changes). */
+  const describe = (curves: RenderCurve[]) => {
+    const node = describeRef.current
+    if (!node) return
+    const { w, h } = sizeRef.current
+    const vp = viewportRef.current
+    const fmt = (value: number) => formatNumber(value, 3)
+    const parts = [
+      `View: x from ${fmt(screenToWorldX(vp, 0))} to ${fmt(screenToWorldX(vp, w))}, y from ${fmt(screenToWorldY(vp, h))} to ${fmt(screenToWorldY(vp, 0))}.`,
+    ]
+    const visible = curves.filter((curve) => curve.visible)
+    parts.push(`${visible.length} visible curve${visible.length === 1 ? '' : 's'}.`)
+    for (const curve of visible) {
+      const raw = equationsRef.current.find((eq) => eq.id === curve.id)?.raw ?? curve.id
+      let min = Infinity
+      let max = -Infinity
+      const groups = curve.samples.points ? [...curve.samples.segments, curve.samples.points] : curve.samples.segments
+      for (const group of groups) {
+        for (const y of group.ys) {
+          if (y < min) min = y
+          if (y > max) max = y
+        }
+      }
+      parts.push(
+        Number.isFinite(min)
+          ? `${raw}: y from ${fmt(min)} to ${fmt(max)} in view${curve.samples.segments.length > 1 ? `, ${curve.samples.segments.length} pieces` : ''}.`
+          : `${raw}: no points in view.`
+      )
+    }
+    const text = parts.join(' ')
+    if (text === describeTextRef.current.pending) return
+    describeTextRef.current.pending = text
+    // Debounced: a live region that changes every pan frame floods screen readers.
+    if (describeTextRef.current.timer !== null) window.clearTimeout(describeTextRef.current.timer)
+    describeTextRef.current.timer = window.setTimeout(() => {
+      describeTextRef.current.timer = null
+      if (node.textContent !== text) node.textContent = text
+    }, 600)
+  }
+
   const updateFollowCam = () => {
     const drawTime = drawTimeRef.current
     if (drawTime === undefined) return
@@ -855,6 +897,7 @@ export function GraphCanvas({
       sigmaRef: pl === 'reim' ? sigmaRef.current : null,
       disableHover: disableHoverRef.current,
     }
+    describe(curves)
     const drawer = pl === 'reim' ? drawParametric : drawGraph
     // Snapshot without hover so exports do not include the crosshair.
     const exportState: RenderState = { ...base, hover: null }
@@ -1275,6 +1318,29 @@ export function GraphCanvas({
     }
   }
 
+  // Keyboard navigation while the canvas has focus: arrows pan, +/- zoom.
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLCanvasElement>) => {
+    if (drawTimeRef.current !== undefined && !unlockedRef.current) return
+    const { w, h } = sizeRef.current
+    const stepPx = event.shiftKey ? 200 : 40
+    const pans: Record<string, [number, number]> = {
+      ArrowLeft: [stepPx, 0],
+      ArrowRight: [-stepPx, 0],
+      ArrowUp: [0, stepPx],
+      ArrowDown: [0, -stepPx],
+    }
+    const pan = pans[event.key]
+    const zoom = event.key === '+' || event.key === '=' ? 1.25 : event.key === '-' || event.key === '_' ? 0.8 : null
+    if (!pan && zoom === null) return
+    event.preventDefault()
+    // Keep the window-level arrow shortcut (snap step) from also running.
+    event.stopPropagation()
+    cancelTween()
+    if (pan) panBy(viewportRef.current, pan[0], pan[1])
+    if (zoom !== null) zoomAt(viewportRef.current, w / 2, h / 2, zoom)
+    markDirty()
+  }
+
   const handleDoubleClick = () => {
     if (drawTimeRef.current !== undefined && !unlockedRef.current) return
     reset()
@@ -1305,7 +1371,14 @@ export function GraphCanvas({
         onPointerCancel={endPointer}
         onPointerLeave={() => setHover(null)}
         onDoubleClick={handleDoubleClick}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
+        role="application"
+        aria-roledescription="graph"
+        aria-label="graph canvas — arrow keys pan, plus and minus zoom"
+        aria-describedby="graph-description"
       />
+      <div ref={describeRef} id="graph-description" className="sr-only" aria-live="polite" />
       {showFieldPicker && (
         <label className="absolute bottom-20 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1.5 rounded-lg border bg-background/85 px-2 py-1 text-[11px] text-muted-foreground backdrop-blur-md">
           field
