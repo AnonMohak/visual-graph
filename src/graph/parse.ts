@@ -29,6 +29,7 @@ export interface ParseSuccess {
   relation?: Relation
   tRange?: [number, number]
   area?: AreaInfo
+  points?: [number, number][]
   kind: EquationKind
   component: ComplexComponent
   sigma: number
@@ -550,6 +551,19 @@ function areaOf(expr: string): { integrand: string; a: string; b: string } | nul
   return { integrand: body.slice(0, commas[0]), a, b }
 }
 
+const NUM = '-?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[+-]?\\d+)?'
+const POINT = `\\((${NUM}),(${NUM})\\)`
+const POINT_LIST_RE = new RegExp(`^${POINT}(?:,${POINT})*$`, 'i')
+const POINT_RE = new RegExp(POINT, 'gi')
+
+/** `(1,2),(3,4)` (spaces already removed) -> [[1, 2], [3, 4]]; null if not a numeric point list. */
+function parsePointList(expr: string): [number, number][] | null {
+  if (!POINT_LIST_RE.test(expr)) return null
+  const out: [number, number][] = []
+  for (const match of expr.matchAll(POINT_RE)) out.push([Number(match[1]), Number(match[2])])
+  return out.every(([x, y]) => Number.isFinite(x) && Number.isFinite(y)) ? out : null
+}
+
 /** Index of the comma splitting `(a, b)` at the top level, or -1. */
 function tupleComma(expr: string): number {
   if (!expr.startsWith('(') || !expr.endsWith(')')) return -1
@@ -812,6 +826,24 @@ function parseInner(input: string, env: Env): ParseResult {
   const normalized = normalize(raw)
   if (!normalized.expr) {
     return { ok: false, raw, message: 'empty expression' }
+  }
+  const points = parsePointList(normalized.expr)
+  if (points) {
+    return {
+      ok: true,
+      plot: true,
+      raw,
+      expr: normalized.expr,
+      latex: points.length > 3
+        ? `\\left(${points[0].join(',\\ ')}\\right),\\ \\ldots\\ (${points.length}\\ \\text{points})`
+        : points.map((p) => `\\left(${p.join(',\\ ')}\\right)`).join(',\\ '),
+      evaluate: () => null,
+      points,
+      kind: 'points',
+      component: 're',
+      sigma: 0.5,
+      suggestedPlane: 'xy',
+    }
   }
   if (/^r=/.test(normalized.expr) || isTuple(normalized.expr)) {
     return parseCurve(raw, normalized, env)

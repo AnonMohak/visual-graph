@@ -93,6 +93,15 @@ export function transformForAxes(eq: Equation, logX: boolean, logY: boolean): Eq
     const f = eq.evaluateXY
     return { ...eq, rev, evaluateXY: (u, v) => f(fromX(u), fromY(v)) }
   }
+  if (eq.points) {
+    const points: [number, number][] = []
+    for (const [x, y] of eq.points) {
+      const u = toX(x)
+      const v = toY(y)
+      if (u !== null && v !== null) points.push([u, v])
+    }
+    return { ...eq, rev, points }
+  }
   if (eq.evaluatePoint) {
     const f = eq.evaluatePoint
     return {

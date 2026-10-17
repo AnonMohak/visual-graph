@@ -271,6 +271,19 @@ function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
       ctx.globalAlpha = 1
     }
     if (curve.area) drawArea(ctx, state, curve, color)
+    const points = curve.samples.points
+    if (points) {
+      const radius = (curve.lineWidth ?? 2) + 1.5
+      ctx.fillStyle = color
+      ctx.beginPath()
+      for (let k = 0; k < points.xs.length; k++) {
+        const sx = worldToScreenX(vp, points.xs[k])
+        const sy = worldToScreenY(vp, points.ys[k])
+        ctx.moveTo(sx + radius, sy)
+        ctx.arc(sx, sy, radius, 0, Math.PI * 2)
+      }
+      ctx.fill()
+    }
     const width = curve.lineWidth ?? 2
     ctx.lineWidth = width
     if (curve.dash === 'dashed') ctx.setLineDash([width * 4, width * 3])

@@ -26,7 +26,8 @@ export interface ShareState {
 }
 
 const MAX_EQUATIONS = 100
-const MAX_LENGTH = 500
+// Point lists from pasted data can be long.
+const MAX_LENGTH = 20000
 
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = ''

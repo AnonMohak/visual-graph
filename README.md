@@ -123,6 +123,16 @@ The toolbar under the theme switch (xy plane) has three toggles:
 - **table**: show a table of x and f(x) for a curve, with your own range and
   step.
 
+## Data and regression
+
+Click **data** in the toolbar. Paste x,y pairs (CSV, TSV, or spaces; a
+header line is skipped) and click **add points** to draw a scatter plot.
+You can also type points directly: `(1, 2), (2, 3.9), (3, 6.1)`.
+
+Under **regression**, pick a point set and a fit (linear up to degree 6),
+then click **add fit**. The fitted curve is added as a normal equation,
+for example `y = 2.01x - 0.03`, and the panel shows R².
+
 ## View settings
 
 Click **view** in the toolbar (xy plane) to open the view settings. They

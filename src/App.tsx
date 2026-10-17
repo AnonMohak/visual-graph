@@ -4,6 +4,7 @@ import { AnimDebugPanel } from '@/components/AnimDebugPanel'
 import { AnimatedControls } from '@/components/AnimatedControls'
 import { AnimatedModeToggle, type GraphMode } from '@/components/AnimatedModeToggle'
 import { CommandBar, type CommandBarApi } from '@/components/CommandBar'
+import { DataPanel } from '@/components/DataPanel'
 import { EmptyGraph } from '@/components/EmptyGraph'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { GraphCanvas, type GraphApi } from '@/components/GraphCanvas'
@@ -159,6 +160,7 @@ export default function App() {
   const [tableOpen, setTableOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [dataOpen, setDataOpen] = useState(false)
   const [embed] = useState(() => new URLSearchParams(window.location.search).has('embed'))
   const graphRef = useRef<GraphApi | null>(null)
   const commandRef = useRef<CommandBarApi | null>(null)
@@ -584,9 +586,11 @@ export default function App() {
               { key: 'tangent', label: 'tangent', title: 'tangent line at the cursor', active: analysis.tangent },
               { key: 'table', label: 'table', title: 'table of values', active: tableOpen },
               { key: 'view', label: 'view', title: 'grid, axes, scales, angles, palette', active: viewOpen },
+              { key: 'data', label: 'data', title: 'paste data, fit a regression', active: dataOpen },
             ]}
             onToggle={(key) => {
               if (key === 'table') setTableOpen((prev) => !prev)
+              else if (key === 'data') setDataOpen((prev) => !prev)
               else if (key === 'view') setViewOpen((prev) => !prev)
               else setAnalysis((prev) => ({ ...prev, [key]: !prev[key as 'points' | 'tangent'] }))
             }}
@@ -594,6 +598,9 @@ export default function App() {
         )}
         {!animated && activePlane === 'xy' && viewOpen && (
           <ViewPanel view={view} onChange={changeView} onClose={() => setViewOpen(false)} />
+        )}
+        {!embed && !animated && dataOpen && (
+          <DataPanel equations={plotted} onAdd={addRaw} onClose={() => setDataOpen(false)} />
         )}
         {!animated && tableOpen && <ValueTable equations={plotted} onClose={() => setTableOpen(false)} />}
         {activeEquations.length === 0 && <EmptyGraph />}

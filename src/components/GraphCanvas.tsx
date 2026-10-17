@@ -444,6 +444,32 @@ export function GraphCanvas({
     const drawRange = animated ? { xMin: DRAW_X_MIN, xMax: DRAW_X_MAX } : bounds
     const list = equationsRef.current.map((equation) => {
       active.add(equation.id)
+      if (equation.points) {
+        const sig = `pts-list|${equation.id}|${equation.rev}`
+        let entry = cache.get(equation.id)
+        if (!entry || entry.sig !== sig) {
+          entry = {
+            sig,
+            samples: {
+              segments: [],
+              hasPoints: equation.points.length > 0,
+              points: {
+                xs: Float64Array.from(equation.points, (p) => p[0]),
+                ys: Float64Array.from(equation.points, (p) => p[1]),
+              },
+            },
+          }
+          cache.set(equation.id, entry)
+        }
+        status[equation.id] = entry.samples.hasPoints
+        return {
+          id: equation.id,
+          colorIndex: equation.colorToken,
+          visible: equation.visible,
+          samples: entry.samples,
+          evaluate: equation.evaluate,
+        }
+      }
       if (equation.evaluateXY && equation.relation) {
         // Grid sampling depends on the whole view, so the key includes the origin.
         const cellPx = spacing === COARSE_SPACING ? 8 : 4
@@ -993,7 +1019,8 @@ export function GraphCanvas({
     let max = -Infinity
     for (const curve of curves) {
       if (!curve.visible) continue
-      for (const segment of curve.samples.segments) {
+      const groups = curve.samples.points ? [...curve.samples.segments, curve.samples.points] : curve.samples.segments
+      for (const segment of groups) {
         for (const y of segment.ys) {
           if (y < min) min = y
           if (y > max) max = y

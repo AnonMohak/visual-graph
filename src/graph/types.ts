@@ -4,7 +4,7 @@ export type EvaluateFn = (x: number) => number | null
 export type EvaluateComplexFn = (s: Complex) => Complex | null
 
 export type Plane = 'xy' | 'st' | 'reim'
-export type EquationKind = 'real' | 'complex-slice' | 'complex-param' | 'parametric' | 'polar' | 'implicit'
+export type EquationKind = 'real' | 'complex-slice' | 'complex-param' | 'parametric' | 'polar' | 'implicit' | 'points'
 
 /** Shaded area under a curve between a and b, with its signed value. */
 export interface AreaInfo {
@@ -32,6 +32,8 @@ export interface Equation {
   evaluateXY?: EvaluateXYFn
   relation?: Relation
   area?: AreaInfo
+  /** Data points for a point list `(1, 2), (3, 4)`. */
+  points?: [number, number][]
   /** Parameter range for parametric/polar curves. */
   tRange?: [number, number]
   kind: EquationKind
@@ -75,6 +77,8 @@ export interface CurveSamples {
   cell?: number
   /** Cell height in world units (differs from cell with a free aspect). */
   cellY?: number
+  /** Scatter points drawn as dots. */
+  points?: { xs: Float64Array; ys: Float64Array }
 }
 
 export interface Viewport {

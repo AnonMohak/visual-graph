@@ -105,6 +105,7 @@ export function buildEquations(specs: EquationSpec[], options: BuildOptions = {}
       evaluateXY: parsed.evaluateXY,
       relation: parsed.relation,
       area: parsed.area,
+      points: parsed.points,
       tRange: parsed.tRange,
       kind: parsed.kind,
       component: parsed.component,
