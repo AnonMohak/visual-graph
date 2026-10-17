@@ -16,3 +16,14 @@ describe('share state', () => {
     expect(decodeShareState('')).toBeNull()
   })
 })
+
+describe('share styles', () => {
+  it('round-trips styles and drops invalid values', () => {
+    const hash = encodeShareState({ eq: ['x', 'x^2'], vp: null, sty: [{ c: '#ff0000', d: 'dashed', w: 3 }, 0] })
+    expect(decodeShareState(hash)?.sty).toEqual([{ c: '#ff0000', d: 'dashed', w: 3 }, 0])
+  })
+  it('rejects unsafe colors', async () => {
+    const { parseStyle } = await import('../share')
+    expect(parseStyle({ c: 'red;background:url(x)', w: 99 })).toBe(0)
+  })
+})

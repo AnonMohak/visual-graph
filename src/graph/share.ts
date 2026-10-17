@@ -1,4 +1,7 @@
-import type { ComplexComponent, Plane, Viewport } from './types'
+import type { ComplexComponent, LineDash, Plane, Viewport } from './types'
+
+/** Compact per-curve style: c = hex color, d = dash, w = line width. 0 = default. */
+export type ShareStyle = { c?: string; d?: LineDash; w?: number } | 0
 
 export interface ShareViewport {
   s: number
@@ -17,6 +20,7 @@ export interface ShareState {
   /** Visibility (1 = visible, 0 = hidden) and color token per equation. */
   vis?: number[]
   col?: number[]
+  sty?: ShareStyle[]
 }
 
 const MAX_EQUATIONS = 100
@@ -103,8 +107,26 @@ export function encodeShareState(state: ShareState): string {
     })
     payload.col = col
   }
+  if (state.sty?.some((style) => style !== 0)) payload.sty = state.sty.slice(0, MAX_EQUATIONS)
   const bytes = new TextEncoder().encode(JSON.stringify(payload))
   return bytesToBase64Url(bytes)
+}
+
+/** Validate one style entry from untrusted input. */
+export function parseStyle(raw: unknown): ShareStyle {
+  if (!raw || typeof raw !== 'object') return 0
+  const record = raw as Record<string, unknown>
+  const style: { c?: string; d?: LineDash; w?: number } = {}
+  if (typeof record.c === 'string' && /^#[0-9a-f]{6}$/i.test(record.c)) style.c = record.c
+  if (record.d === 'dashed' || record.d === 'dotted') style.d = record.d
+  const w = Number(record.w)
+  if (Number.isFinite(w) && w >= 0.5 && w <= 10) style.w = w
+  return Object.keys(style).length ? style : 0
+}
+
+/** Style entry for a spec, 0 when it uses all defaults. */
+export function styleOf(spec: { color?: string; dash?: LineDash; lineWidth?: number }): ShareStyle {
+  return parseStyle({ c: spec.color, d: spec.dash, w: spec.lineWidth })
 }
 
 export function decodeShareState(hash: string): ShareState | null {
@@ -155,7 +177,8 @@ export function decodeShareState(hash: string): ShareState | null {
           return Number.isFinite(n) ? Math.min(4, Math.max(0, n)) : 0
         })
     }
-    return { eq, vp, plane, sigma, comp, homes, vis, col }
+    const sty = Array.isArray(record.sty) ? (record.sty as unknown[]).slice(0, MAX_EQUATIONS).map(parseStyle) : undefined
+    return { eq, vp, plane, sigma, comp, homes, vis, col, sty }
   } catch {
     return null
   }

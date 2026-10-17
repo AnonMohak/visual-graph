@@ -614,7 +614,10 @@ export function GraphCanvas({
     const xMin = screenToWorldX(vp, 0)
     const xMax = screenToWorldX(vp, w)
     const features: Feature[] = []
-    for (const curve of list) features.push(...findFeatures(curve.evaluate, curve.samples.segments, curve.colorIndex, tolerance))
+    for (const curve of list) {
+      const found = findFeatures(curve.evaluate, curve.samples.segments, curve.colorIndex, tolerance)
+      features.push(...found.map((feature) => ({ ...feature, color: curve.color })))
+    }
     const pairs = list.slice(0, 6)
     for (let i = 0; i < pairs.length; i++) {
       for (let j = i + 1; j < pairs.length; j++) {
@@ -769,7 +772,11 @@ export function GraphCanvas({
       }, fieldCanvas)
       return
     }
-    const curves = buildCurves(spacing)
+    // Per-curve style (custom color, dash, width) from the equation specs.
+    const curves = buildCurves(spacing).map((curve) => {
+      const eq = equationsRef.current.find((item) => item.id === curve.id)
+      return eq ? { ...curve, color: eq.color, dash: eq.dash, lineWidth: eq.lineWidth } : curve
+    })
     const labels = pl === 'reim' ? { x: 'Re', y: 'Im' } : equationsRef.current.some((e) => e.kind === 'complex-slice' || e.kind === 'complex-param')
       ? { x: 't', y: 'y' }
       : { x: 'x', y: 'y' }

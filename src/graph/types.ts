@@ -40,6 +40,11 @@ export interface Equation {
   suggestedPlane: Plane
   colorToken: number
   visible: boolean
+  /** Custom stroke color (hex); overrides colorToken. */
+  color?: string
+  dash?: LineDash
+  /** Stroke width in CSS pixels (default 2). */
+  lineWidth?: number
   /** False for constant definitions (`a = 2`) and equations that failed to parse. */
   plot: boolean
   /** Name this equation defines (`a` in `a = 2`, `f` in `f(x) = ...`). */
@@ -51,6 +56,8 @@ export interface Equation {
   /** Changes whenever the curve's values may change; part of the sample cache key. */
   rev: string
 }
+
+export type LineDash = 'solid' | 'dashed' | 'dotted'
 
 export interface Segment {
   xs: Float64Array

@@ -1,6 +1,6 @@
 import { slopeAt, type Feature } from './analysis'
 import type { GraphColors } from './color'
-import type { AreaInfo, CurveSamples, EvaluateFn, Viewport } from './types'
+import type { AreaInfo, CurveSamples, EvaluateFn, LineDash, Viewport } from './types'
 import { formatNumber, formatTick, niceStep, screenToWorldX, screenToWorldY, worldToScreenX, worldToScreenY } from './viewport'
 
 export interface RenderCurve {
@@ -9,6 +9,10 @@ export interface RenderCurve {
   visible: boolean
   samples: CurveSamples
   evaluate: EvaluateFn
+  /** Custom stroke color; overrides colorIndex. */
+  color?: string
+  dash?: LineDash
+  lineWidth?: number
   /** Shaded area between the curve and the x-axis. */
   area?: AreaInfo
   /** Strict inequality: draw the boundary dashed. */
@@ -194,7 +198,7 @@ function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
   ctx.lineCap = 'round'
   for (const curve of state.curves) {
     if (!curve.visible) continue
-    const color = colors.charts[curve.colorIndex % colors.charts.length]
+    const color = curve.color ?? colors.charts[curve.colorIndex % colors.charts.length]
     ctx.save()
     const region = curve.samples.region
     const cell = curve.samples.cell
@@ -211,7 +215,11 @@ function drawCurves(ctx: CanvasRenderingContext2D, state: RenderState): void {
       ctx.globalAlpha = 1
     }
     if (curve.area) drawArea(ctx, state, curve, color)
-    if (curve.strict) ctx.setLineDash([6, 5])
+    const width = curve.lineWidth ?? 2
+    ctx.lineWidth = width
+    if (curve.dash === 'dashed') ctx.setLineDash([width * 4, width * 3])
+    else if (curve.dash === 'dotted') ctx.setLineDash([0.1, width * 2.5])
+    else if (curve.strict) ctx.setLineDash([6, 5])
     // Subtle glow: same-hue shadow, low blur so thin curves stay crisp.
     ctx.strokeStyle = color
     ctx.shadowColor = color
@@ -302,7 +310,7 @@ function drawMarkers(ctx: CanvasRenderingContext2D, state: RenderState): void {
 
   for (const curve of state.curves) {
     if (!curve.visible) continue
-    const color = colors.charts[curve.colorIndex % colors.charts.length]
+    const color = curve.color ?? colors.charts[curve.colorIndex % colors.charts.length]
     const worlds: { wx: number; isHover: boolean }[] = []
     if (hoverWorld !== null) worlds.push({ wx: hoverWorld, isHover: true })
     if (snapWorld !== null) worlds.push({ wx: snapWorld, isHover: false })
@@ -407,7 +415,7 @@ function drawFeatures(ctx: CanvasRenderingContext2D, state: RenderState): void {
   for (const feature of features) {
     const sx = worldToScreenX(vp, feature.x)
     const sy = worldToScreenY(vp, feature.y)
-    const color = feature.type === 'intersection' ? colors.accent : colors.charts[feature.colorIndex % colors.charts.length]
+    const color = feature.type === 'intersection' ? colors.accent : (feature.color ?? colors.charts[feature.colorIndex % colors.charts.length])
     ctx.beginPath()
     ctx.arc(sx, sy, 4, 0, Math.PI * 2)
     ctx.fillStyle = colors.background
@@ -425,7 +433,7 @@ function drawFeatures(ctx: CanvasRenderingContext2D, state: RenderState): void {
   }
   if (nearest) {
     const { feature, sx, sy } = nearest
-    const color = feature.type === 'intersection' ? colors.accent : colors.charts[feature.colorIndex % colors.charts.length]
+    const color = feature.type === 'intersection' ? colors.accent : (feature.color ?? colors.charts[feature.colorIndex % colors.charts.length])
     drawChip(ctx, state, `${FEATURE_LABEL[feature.type]} (${formatNumber(feature.x, 4)}, ${formatNumber(feature.y, 4)})`, sx, sy, color)
   }
 }
@@ -439,7 +447,7 @@ function drawTangents(ctx: CanvasRenderingContext2D, state: RenderState): void {
     const y = curve.evaluate(x)
     const m = y === null ? null : slopeAt(curve.evaluate, x)
     if (y === null || m === null || !Number.isFinite(m)) continue
-    const color = colors.charts[curve.colorIndex % colors.charts.length]
+    const color = curve.color ?? colors.charts[curve.colorIndex % colors.charts.length]
     const x0 = screenToWorldX(vp, 0)
     const x1 = screenToWorldX(vp, width)
     ctx.save()

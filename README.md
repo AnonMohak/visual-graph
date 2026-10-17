@@ -89,6 +89,14 @@ and operators `+ - * / ^ ( )`.
 
 - **Legend (top right):** lists every curve with its color. Click the eye
   icon to hide/show a curve, the `×` icon to delete it.
+- **Edit:** double-click an equation in the legend to edit it. Press Enter
+  to save or Escape to cancel.
+- **Reorder:** drag a legend row by its grip to a new position.
+- **Style:** the palette icon opens color swatches, a custom color picker,
+  line style (solid, dashed, dotted), and line width. Styles are saved and
+  shared with the link.
+- **Undo/redo:** `Ctrl+Z` undoes, `Ctrl+Shift+Z` or `Ctrl+Y` redoes adds,
+  deletes, edits, moves, and style changes.
 - **Readout (top left):** hover the canvas to see each curve's value at the
   cursor's x position. `—` means undefined there (e.g. `log(x)` for x ≤ 0).
 - **Snap box (`x=`):** type an exact x to evaluate every curve there.
@@ -138,6 +146,8 @@ a `copied` badge confirms a successful copy.
 | `←` / `→`             | Snap `x=` box   | Step the snap x by one grid step    |
 | `0`                   | Anywhere*       | Reset the viewport                  |
 | `f`                   | Anywhere*       | Fit curves vertically               |
+| `Ctrl+Z`              | Anywhere*       | Undo                                |
+| `Ctrl+Shift+Z`/`Ctrl+Y` | Anywhere*     | Redo                                |
 
 \* Not while typing in a text field.
 

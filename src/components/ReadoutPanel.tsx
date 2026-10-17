@@ -6,7 +6,7 @@ import { resultToC } from '@/graph/complex'
 import { useReadout } from '@/graph/store'
 import { isComplexKind, type ComplexComponent, type Equation, type Plane } from '@/graph/types'
 import { formatNumber } from '@/graph/viewport'
-import { CHART_CLASSES } from '@/lib/chart'
+import { swatchClass, swatchStyle } from '@/lib/chart'
 import { cn } from '@/lib/utils'
 
 interface ReadoutPanelProps {
@@ -46,7 +46,7 @@ function ReadoutRow({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs">
-      <span className={cn('size-2 shrink-0 rounded-full', CHART_CLASSES[equation.colorToken % 5])} />
+      <span className={cn('size-2 shrink-0 rounded-full', swatchClass(equation))} style={swatchStyle(equation)} />
       <span className={cn('min-w-0 flex-1 truncate', !equation.visible && 'text-muted-foreground')}>
         {equation.raw}
       </span>
@@ -163,7 +163,7 @@ export function ReadoutPanel({
           return (
             <div key={equation.id} className="flex flex-col gap-0.5 text-xs">
               <div className="flex min-w-0 items-center gap-2">
-                <span className={cn('size-2 shrink-0 rounded-full', CHART_CLASSES[equation.colorToken % 5])} />
+                <span className={cn('size-2 shrink-0 rounded-full', swatchClass(equation))} style={swatchStyle(equation)} />
                 <span className="min-w-0 flex-1 truncate">{equation.raw}</span>
               </div>
               <div className="pl-4 font-mono text-[11px]">
@@ -211,7 +211,7 @@ export function ReadoutPanel({
             return (
               <div key={equation.id} className="flex flex-col gap-0.5">
                 <div className="flex min-w-0 items-center gap-2 text-xs">
-                  <span className={cn('size-2 shrink-0 rounded-full', CHART_CLASSES[equation.colorToken % 5])} />
+                  <span className={cn('size-2 shrink-0 rounded-full', swatchClass(equation))} style={swatchStyle(equation)} />
                   <span className="min-w-0 flex-1 truncate">{equation.raw}</span>
                   <span className="font-mono text-[11px]">t={formatNumber(hoverX, 3)}</span>
                 </div>

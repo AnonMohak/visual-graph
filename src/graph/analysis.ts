@@ -7,6 +7,7 @@ export interface Feature {
   x: number
   y: number
   colorIndex: number
+  color?: string
 }
 
 const ITERATIONS = 50

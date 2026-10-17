@@ -1,5 +1,5 @@
 import { parseEquation, type Env, type ParseSuccess } from './parse'
-import type { Equation } from './types'
+import type { Equation, LineDash } from './types'
 
 /** Persisted part of an equation: what the user typed plus display options. */
 export interface EquationSpec {
@@ -7,6 +7,9 @@ export interface EquationSpec {
   raw: string
   colorToken: number
   visible: boolean
+  color?: string
+  dash?: LineDash
+  lineWidth?: number
 }
 
 export interface BuildResult {
