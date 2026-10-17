@@ -273,6 +273,32 @@ vite.config.ts       # Vite + Tailwind + `@` alias config
 | `npm run lint`  | Lint with oxlint                       |
 | `npm test`      | Run unit tests (Vitest)                |
 | `npm run typecheck` | Typecheck only                     |
+| `npm run e2e`   | Build and run Playwright E2E tests     |
+
+## Tests and CI
+
+- `npm test` runs the unit tests (Vitest) in `src/graph/__tests__/`.
+- `npm run e2e` builds the app, starts a preview server, and runs the
+  Playwright tests in `e2e/` (add, parse error, sliders, undo, share link,
+  zoom, embed). Run `npx playwright install chromium` once first.
+- GitHub Actions (`.github/workflows/ci.yml`) runs lint, typecheck, unit
+  tests, build, and the E2E tests on every push and pull request.
+
+## Deploy
+
+`.github/workflows/deploy.yml` deploys `dist/` to Cloudflare Pages: master
+goes to production and every pull request gets a preview URL as a comment.
+To turn it on:
+
+1. Create a Cloudflare Pages project (direct upload), for example
+   `visual-graph`.
+2. Add the repository secrets `CLOUDFLARE_API_TOKEN` (with the "Cloudflare
+   Pages: Edit" permission) and `CLOUDFLARE_ACCOUNT_ID`.
+3. Optional: set the repository variable `CF_PAGES_PROJECT` if the project
+   name is not `visual-graph`.
+
+Without the secrets the workflow only builds. After the first deploy the
+public demo is at `https://<project>.pages.dev`.
 
 ## Notes
 
