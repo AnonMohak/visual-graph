@@ -230,3 +230,22 @@ export const ANIMATED_EXAMPLES = [
 export function usesTimeVariable(input: string): boolean {
   return /\b(time|t)\b/.test(input)
 }
+
+/** Draw speeds offered in the UI, in world units per second. */
+export const SPEEDS = [0.1, 0.25, 0.5, 1, 2, 5]
+
+/**
+ * Next clock value for playback with loop and reverse.
+ * Returns the new time and whether playback should stop.
+ */
+export function stepClock(
+  time: number,
+  dt: number,
+  total: number,
+  opts: { loop: boolean; reverse: boolean }
+): { time: number; stop: boolean } {
+  const next = time + (opts.reverse ? -dt : dt)
+  if (!opts.reverse && next >= total) return opts.loop ? { time: 0, stop: false } : { time: total, stop: true }
+  if (opts.reverse && next <= 0) return opts.loop ? { time: total, stop: false } : { time: 0, stop: true }
+  return { time: next, stop: false }
+}

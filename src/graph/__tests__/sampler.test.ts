@@ -42,3 +42,14 @@ describe('viewport aspect', async () => {
     expect(fitted.scaleY).toBeCloseTo(4.9)
   })
 })
+
+describe('animation clock', async () => {
+  const { stepClock } = await import('../animated')
+  it('stops at the end, loops, and reverses', () => {
+    expect(stepClock(9.5, 1, 10, { loop: false, reverse: false })).toEqual({ time: 10, stop: true })
+    expect(stepClock(9.5, 1, 10, { loop: true, reverse: false })).toEqual({ time: 0, stop: false })
+    expect(stepClock(0.5, 1, 10, { loop: false, reverse: true })).toEqual({ time: 0, stop: true })
+    expect(stepClock(0.5, 1, 10, { loop: true, reverse: true })).toEqual({ time: 10, stop: false })
+    expect(stepClock(5, 1, 10, { loop: false, reverse: true })).toEqual({ time: 4, stop: false })
+  })
+})

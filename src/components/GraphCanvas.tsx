@@ -56,6 +56,7 @@ export interface GraphApi {
   applyAnimatedHome: () => void
   /** Pan so world point (x, y) is at the canvas center (keeps the zoom). */
   centerOn: (x: number, y: number) => void
+  getCanvas: () => HTMLCanvasElement | null
   /** Current view as a PNG (raster) or SVG (vector) file. */
   exportImage: (kind: 'png' | 'svg') => Promise<Blob | null>
 }
@@ -1080,6 +1081,7 @@ export function GraphCanvas({
         }
       },
       applyAnimatedHome,
+      getCanvas: () => canvasRef.current,
       centerOn: (x, y) => {
         const { w, h } = sizeRef.current
         const vp = viewportRef.current

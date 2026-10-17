@@ -145,6 +145,23 @@ In the **Re-Im** plane (and in `xy` with complex curves), a σ slider sits
 above the input bar. Press play to sweep σ from -1 to 2 and watch the
 curve change; the loop button bounces it back and forth.
 
+## Animated mode
+
+Switch **static / animated** at the top to watch curves draw on from
+x = -5 to 5 while the camera follows the pen. Click **+** to add curves.
+
+The control bar has:
+
+- **play/pause** and **restart**; play at the end starts over.
+- a **scrub** bar to jump to any point of the drawing.
+- **speed** in world units per second (0.1 to 5).
+- **loop** (start again at the end) and **reverse** (draw backward).
+- **sync sliders**: slider constants such as `a = 1` sweep their range
+  together with the pen, so `a*sin(x)` grows while it draws.
+- **record**: plays one full pass from the start and downloads it as a
+  video (MP4 where the browser supports it, otherwise WebM). GIF is not
+  supported; convert the video if you need one.
+
 ## Analysis
 
 The toolbar under the theme switch (xy plane) has three toggles:

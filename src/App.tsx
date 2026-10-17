@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { AddAnimatedModal } from '@/components/AddAnimatedModal'
-import { AnimDebugPanel } from '@/components/AnimDebugPanel'
 import { AnimatedControls } from '@/components/AnimatedControls'
 import { AnimatedModeToggle, type GraphMode } from '@/components/AnimatedModeToggle'
 import { CommandBar, type CommandBarApi } from '@/components/CommandBar'
@@ -20,10 +19,10 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { ValueTable } from '@/components/ValueTable'
 import { ViewPanel } from '@/components/ViewPanel'
 import { loadView, saveView, type ViewSettings } from '@/graph/view'
-import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete } from '@/graph/animated'
+import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete, stepClock } from '@/graph/animated'
 import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/graph/equations'
 import { initHistory, record, redo, undo } from '@/graph/history'
-import { formatSliderValue, sliderOf } from '@/graph/sliders'
+import { formatSliderValue, sliderOf, sliderRange } from '@/graph/sliders'
 import { downloadBlob, graphFromJson, graphToJson } from '@/graph/library'
 import {
   decodeShareHash,
@@ -175,14 +174,34 @@ export default function App() {
 
   // --- Animated mode state (v1: in-memory only, no persistence) ---
   const [mode, setMode] = useState<GraphMode>('static')
+  const [debugSpeed, setDebugSpeed] = useState(DRAW_UNITS_PER_SEC)
+  const [loop, setLoop] = useState(false)
+  const [reverse, setReverse] = useState(false)
+  const [syncSliders, setSyncSliders] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const playbackRef = useRef({ loop, reverse })
+  useEffect(() => {
+    playbackRef.current = { loop, reverse }
+  }, [loop, reverse])
   const [animatedSpecs, setAnimatedSpecs] = useState<EquationSpec[]>([])
-  const animatedBuilt = useMemo(() => buildEquations(animatedSpecs, { angle: view.angle }), [animatedSpecs, view.angle])
+  const [drawTime, setDrawTime] = useState(0)
+  // Sync sliders: each slider constant sweeps its range as the pen moves.
+  const syncProgress = syncSliders ? Math.min(1, drawTime / drawDuration(debugSpeed)) : null
+  const animatedBuilt = useMemo(() => {
+    if (syncProgress === null) return buildEquations(animatedSpecs, { angle: view.angle })
+    const swept = animatedSpecs.map((spec) => {
+      const slider = sliderOf(spec.raw)
+      if (!slider) return spec
+      const range = sliderRange(slider.value)
+      const value = range.min + (range.max - range.min) * syncProgress
+      return { ...spec, raw: `${slider.name} = ${formatSliderValue(value)}` }
+    })
+    return buildEquations(swept, { angle: view.angle })
+  }, [animatedSpecs, view.angle, syncProgress])
   const animatedEquations = animatedBuilt.equations
   const [playing, setPlaying] = useState(true)
-  const [drawTime, setDrawTime] = useState(0)
   const [addOpen, setAddOpen] = useState(false)
-  // TEMP debug speed (world units/sec). No other behavior change.
-  const [debugSpeed, setDebugSpeed] = useState(DRAW_UNITS_PER_SEC)
   const drawTimeRef = useRef(0)
   const debugSpeedRef = useRef(debugSpeed)
   useEffect(() => {
@@ -243,20 +262,19 @@ export default function App() {
       setPlaying(false)
       return
     }
-    if (isDrawComplete(drawTimeRef.current, debugSpeedRef.current)) {
-      setPlaying(false)
-      return
-    }
     let raf = 0
     let last = performance.now()
     const tick = (now: number) => {
       const dt = Math.min((now - last) / 1000, 0.1)
       last = now
       const total = drawDuration(debugSpeedRef.current)
-      const next = Math.min(drawTimeRef.current + dt, total)
-      drawTimeRef.current = next
-      setDrawTime(next)
-      if (next >= total) {
+      const wasComplete = drawTimeRef.current >= total
+      const { time, stop } = stepClock(drawTimeRef.current, dt, total, playbackRef.current)
+      drawTimeRef.current = time
+      setDrawTime(time)
+      // A recording ends at the first complete drawing, even when looping.
+      if (recorderRef.current && !wasComplete && time >= total) recorderRef.current.stop()
+      if (stop) {
         setPlaying(false)
         return
       }
@@ -285,9 +303,63 @@ export default function App() {
   const handlePlayPause = () => {
     // Empty list: play stays at 0 paused.
     if (animatedEquations.length === 0) return
-    // At complete head, play resumes nowhere — stay held until Restart.
-    if (!playing && isDrawComplete(drawTimeRef.current, debugSpeedRef.current)) return
+    // Play at the end starts over (or at the start when reversing).
+    if (!playing) {
+      const total = drawDuration(debugSpeedRef.current)
+      if (!reverse && drawTimeRef.current >= total) {
+        drawTimeRef.current = 0
+        setDrawTime(0)
+        requestAnimationFrame(() => graphRef.current?.applyAnimatedHome())
+      } else if (reverse && drawTimeRef.current <= 0) {
+        drawTimeRef.current = total
+        setDrawTime(total)
+      }
+    }
     setPlaying((prev) => !prev)
+  }
+
+  const handleScrub = (time: number) => {
+    drawTimeRef.current = time
+    setDrawTime(time)
+  }
+
+  const handleSpeed = (next: number) => {
+    // Keep the pen at the same x when the speed changes.
+    const ratio = debugSpeed / next
+    drawTimeRef.current *= ratio
+    setDrawTime(drawTimeRef.current)
+    setDebugSpeed(next)
+  }
+
+  const recordSupported = typeof MediaRecorder !== 'undefined' && typeof HTMLCanvasElement.prototype.captureStream === 'function'
+
+  const handleRecord = () => {
+    if (recorderRef.current) {
+      recorderRef.current.stop()
+      return
+    }
+    const canvas = graphRef.current?.getCanvas()
+    if (!canvas || animatedEquations.length === 0) return
+    const type = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find((mime) =>
+      MediaRecorder.isTypeSupported(mime)
+    )
+    const recorder = new MediaRecorder(canvas.captureStream(60), type ? { mimeType: type } : undefined)
+    const chunks: Blob[] = []
+    recorder.ondataavailable = (event) => {
+      if (event.data.size) chunks.push(event.data)
+    }
+    recorder.onstop = () => {
+      recorderRef.current = null
+      setRecording(false)
+      const mime = recorder.mimeType || 'video/webm'
+      downloadBlob(new Blob(chunks, { type: mime }), mime.includes('mp4') ? 'graph.mp4' : 'graph.webm')
+    }
+    recorderRef.current = recorder
+    setRecording(true)
+    // Record one full pass from the start.
+    setReverse(false)
+    handleRestart()
+    recorder.start()
   }
 
   const setActiveSpecs = (update: (prev: EquationSpec[]) => EquationSpec[], tag?: string) => {
@@ -688,20 +760,24 @@ export default function App() {
         )}
         {animated && (
           <>
-            <AnimDebugPanel
-              speed={debugSpeed}
-              onSpeedChange={setDebugSpeed}
-              drawTime={drawTime}
-              total={totalDuration}
-            />
             <AnimatedControls
               playing={playing}
               onPlayPause={handlePlayPause}
               onRestart={handleRestart}
               onAddClick={() => setAddOpen(true)}
-              speed={debugSpeed}
               elapsed={drawTime}
               total={totalDuration}
+              onScrub={handleScrub}
+              speed={debugSpeed}
+              onSpeedChange={handleSpeed}
+              loop={loop}
+              onLoopChange={setLoop}
+              reverse={reverse}
+              onReverseChange={setReverse}
+              syncSliders={syncSliders}
+              onSyncChange={setSyncSliders}
+              recording={recording}
+              onRecord={recordSupported ? handleRecord : null}
               unlocked={unlocked}
             />
           </>
