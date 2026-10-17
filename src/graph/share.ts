@@ -21,6 +21,8 @@ export interface ShareState {
   vis?: number[]
   col?: number[]
   sty?: ShareStyle[]
+  /** Folder per equation ('' = none). */
+  grp?: string[]
 }
 
 const MAX_EQUATIONS = 100
@@ -108,6 +110,7 @@ export function encodeShareState(state: ShareState): string {
     payload.col = col
   }
   if (state.sty?.some((style) => style !== 0)) payload.sty = state.sty.slice(0, MAX_EQUATIONS)
+  if (state.grp?.some(Boolean)) payload.grp = state.grp.slice(0, MAX_EQUATIONS).map((name) => name.slice(0, 40))
   const bytes = new TextEncoder().encode(JSON.stringify(payload))
   return bytesToBase64Url(bytes)
 }
@@ -178,7 +181,10 @@ export function decodeShareState(hash: string): ShareState | null {
         })
     }
     const sty = Array.isArray(record.sty) ? (record.sty as unknown[]).slice(0, MAX_EQUATIONS).map(parseStyle) : undefined
-    return { eq, vp, plane, sigma, comp, homes, vis, col, sty }
+    const grp = Array.isArray(record.grp)
+      ? (record.grp as unknown[]).slice(0, MAX_EQUATIONS).map((name) => (typeof name === 'string' ? name.slice(0, 40) : ''))
+      : undefined
+    return { eq, vp, plane, sigma, comp, homes, vis, col, sty, grp }
   } catch {
     return null
   }

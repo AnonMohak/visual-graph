@@ -45,6 +45,8 @@ export interface Equation {
   dash?: LineDash
   /** Stroke width in CSS pixels (default 2). */
   lineWidth?: number
+  /** Folder name in the legend. */
+  group?: string
   /** False for constant definitions (`a = 2`) and equations that failed to parse. */
   plot: boolean
   /** Name this equation defines (`a` in `a = 2`, `f` in `f(x) = ...`). */

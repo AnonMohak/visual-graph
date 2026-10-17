@@ -115,7 +115,7 @@ export function ReadoutPanel({
     return (
       <div
         className={cn(
-          'absolute left-3 top-3 z-10 flex w-64 flex-col gap-2 rounded-lg border bg-background/80 p-2 backdrop-blur-md',
+          'absolute left-3 top-3 z-10 flex w-64 flex-col gap-2 rounded-lg border bg-background/80 p-2 backdrop-blur-md max-sm:hidden',
           className
         )}
       >
@@ -150,7 +150,7 @@ export function ReadoutPanel({
     return (
       <div
         className={cn(
-          'absolute left-3 top-3 z-10 flex w-64 flex-col gap-2 rounded-lg border bg-background/80 p-2 backdrop-blur-md',
+          'absolute left-3 top-3 z-10 flex w-64 flex-col gap-2 rounded-lg border bg-background/80 p-2 backdrop-blur-md max-sm:hidden',
           className
         )}
       >
@@ -184,7 +184,7 @@ export function ReadoutPanel({
   return (
     <div
       className={cn(
-        'absolute left-3 top-3 z-10 flex w-64 flex-col gap-2 rounded-lg border bg-background/80 p-2 backdrop-blur-md',
+        'absolute left-3 top-3 z-10 flex w-64 flex-col gap-2 rounded-lg border bg-background/80 p-2 backdrop-blur-md max-sm:hidden',
         className
       )}
     >

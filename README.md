@@ -95,6 +95,13 @@ and operators `+ - * / ^ ( )`.
 - **Style:** the palette icon opens color swatches, a custom color picker,
   line style (solid, dashed, dotted), and line width. Styles are saved and
   shared with the link.
+- **Folders:** type a folder name in the style panel to group curves.
+  Click a folder header to collapse it; its eye icon hides or shows the
+  whole folder. Dropping a row onto another row moves it into that folder.
+- **Show/hide all:** the button in the legend header.
+- **Phones:** the legend becomes a collapsible sheet above the input bar,
+  with larger buttons. The readout panel is hidden on small screens.
+- **Help:** press `?` (or the `?` button on phones) for shortcuts and syntax.
 - **Undo/redo:** `Ctrl+Z` undoes, `Ctrl+Shift+Z` or `Ctrl+Y` redoes adds,
   deletes, edits, moves, and style changes.
 - **Readout (top left):** hover the canvas to see each curve's value at the
@@ -163,6 +170,7 @@ a `copied` badge confirms a successful copy.
 | `←` / `→`             | Snap `x=` box   | Step the snap x by one grid step    |
 | `0`                   | Anywhere*       | Reset the viewport                  |
 | `f`                   | Anywhere*       | Fit curves vertically               |
+| `?`                   | Anywhere*       | Show or hide help                   |
 | `Ctrl+Z`              | Anywhere*       | Undo                                |
 | `Ctrl+Shift+Z`/`Ctrl+Y` | Anywhere*     | Redo                                |
 

@@ -7,6 +7,7 @@ import { CommandBar, type CommandBarApi } from '@/components/CommandBar'
 import { EmptyGraph } from '@/components/EmptyGraph'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { GraphCanvas, type GraphApi } from '@/components/GraphCanvas'
+import { HelpOverlay } from '@/components/HelpOverlay'
 import { Legend, type SpecPatch } from '@/components/Legend'
 import { PlaneToggle } from '@/components/PlaneToggle'
 import { ReadoutPanel } from '@/components/ReadoutPanel'
@@ -26,14 +27,15 @@ import { niceStep } from '@/graph/viewport'
 const STORAGE_KEY_V2 = 'graph.equations.v2'
 const STORAGE_KEY_V1 = 'graph.equations.v1'
 
-function specsFromRaws(raws: string[], vis?: number[], col?: number[], sty?: ShareStyle[]): EquationSpec[] {
+function specsFromRaws(raws: string[], vis?: number[], col?: number[], sty?: ShareStyle[], grp?: string[]): EquationSpec[] {
   return raws.map((raw, i) => {
     const colVal = col?.[i]
     const colorToken = colVal !== undefined && Number.isFinite(colVal)
       ? Math.min(4, Math.max(0, Math.round(colVal)))
       : i % 5
     const style = sty?.[i] || {}
-    return { id: newSpecId(), raw, colorToken, visible: vis?.[i] !== 0, color: style.c, dash: style.d, lineWidth: style.w }
+    const group = grp?.[i] || undefined
+    return { id: newSpecId(), raw, colorToken, visible: vis?.[i] !== 0, color: style.c, dash: style.d, lineWidth: style.w, group }
   })
 }
 
@@ -45,6 +47,7 @@ interface PersistedV2 {
   vis?: number[]
   col?: number[]
   sty?: unknown[]
+  grp?: unknown[]
 }
 
 function loadPersisted(): { specs: EquationSpec[]; plane: Plane; sigma: number; comp: ComplexComponent } {
@@ -55,7 +58,7 @@ function loadPersisted(): { specs: EquationSpec[]; plane: Plane; sigma: number; 
     const state = decodeShareState(hash)
     if (state) {
       return {
-        specs: specsFromRaws(state.eq, state.vis, state.col, state.sty),
+        specs: specsFromRaws(state.eq, state.vis, state.col, state.sty, state.grp),
         plane: state.plane ?? 'xy',
         sigma: typeof state.sigma === 'number' ? state.sigma : 0.5,
         comp: state.comp ?? 're',
@@ -70,7 +73,13 @@ function loadPersisted(): { specs: EquationSpec[]; plane: Plane; sigma: number; 
         const v2 = parsed as PersistedV2
         const raws = v2.eq.filter((item): item is string => typeof item === 'string')
         return {
-          specs: specsFromRaws(raws, v2.vis, v2.col, Array.isArray(v2.sty) ? v2.sty.map(parseStyle) : undefined),
+          specs: specsFromRaws(
+            raws,
+            v2.vis,
+            v2.col,
+            Array.isArray(v2.sty) ? v2.sty.map(parseStyle) : undefined,
+            Array.isArray(v2.grp) ? v2.grp.map((name) => (typeof name === 'string' ? name : '')) : undefined
+          ),
           plane: v2.plane === 'st' || v2.plane === 'reim' ? v2.plane : 'xy',
           sigma: typeof v2.sigma === 'number' && Number.isFinite(v2.sigma) ? v2.sigma : 0.5,
           comp: v2.comp === 'im' || v2.comp === 'abs' || v2.comp === 'arg' ? v2.comp : 're',
@@ -137,6 +146,7 @@ export default function App() {
   const [snapX, setSnapX] = useState<number | null>(null)
   const [analysis, setAnalysis] = useState({ points: false, tangent: false })
   const [tableOpen, setTableOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const graphRef = useRef<GraphApi | null>(null)
   const commandRef = useRef<CommandBarApi | null>(null)
 
@@ -266,6 +276,15 @@ export default function App() {
     setActiveSpecs((prev) => prev.map((spec) => (spec.id === id ? { ...spec, ...patch } : spec)), `style:${id}`)
   }
 
+  /** Show or hide every equation, or every equation in one folder. */
+  const setVisibility = (visible: boolean, group?: string | null) => {
+    setActiveSpecs((prev) =>
+      prev.map((spec) =>
+        group === undefined || (spec.group ?? null) === group ? { ...spec, visible } : spec
+      )
+    )
+  }
+
   const moveEquation = (id: string, targetId: string) => {
     setActiveSpecs((prev) => {
       const from = prev.findIndex((spec) => spec.id === id)
@@ -273,7 +292,8 @@ export default function App() {
       if (from < 0 || to < 0) return prev
       const next = [...prev]
       const [moved] = next.splice(from, 1)
-      next.splice(to, 0, moved)
+      // Dropping onto a row also moves the curve into that row's folder.
+      next.splice(to, 0, { ...moved, group: prev[to].group })
       return next
     })
   }
@@ -321,6 +341,7 @@ export default function App() {
         vis: specs.map((spec) => (spec.visible ? 1 : 0)),
         col: specs.map((spec) => spec.colorToken),
         sty: specs.map(styleOf),
+        grp: specs.map((spec) => spec.group ?? ''),
         homes: homes
           ? {
               xy: homes.xy ? { s: homes.xy.scale, ox: homes.xy.originX, oy: homes.xy.originY } : null,
@@ -348,6 +369,7 @@ export default function App() {
         vis: specs.map((spec) => (spec.visible ? 1 : 0)),
         col: specs.map((spec) => spec.colorToken),
         sty: specs.map(styleOf),
+        grp: specs.map((spec) => spec.group ?? ''),
       }
       window.localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(payload))
     } catch {
@@ -428,6 +450,11 @@ export default function App() {
         event.preventDefault()
         const redoing = event.key === 'y' || event.shiftKey
         setHistory((prev) => (redoing ? redo(prev) : undo(prev)))
+        return
+      }
+      if (event.key === '?') {
+        event.preventDefault()
+        setHelpOpen((prev) => !prev)
         return
       }
       if (event.key === '0') {
@@ -523,11 +550,12 @@ export default function App() {
         )}
         <AnimatedModeToggle mode={mode} onChange={switchMode} />
         <PlaneToggle plane={activePlane} onChange={switchPlane} />
-        <Legend equations={activeEquations} onToggle={toggleEquation} onDelete={deleteEquation} onSetConst={setConst} onUpdate={updateEquation} onMove={moveEquation} sigma={sigma} component={component} />
+        <Legend equations={activeEquations} onToggle={toggleEquation} onDelete={deleteEquation} onSetConst={setConst} onUpdate={updateEquation} onMove={moveEquation} onSetVisibility={setVisibility} sigma={sigma} component={component} />
         {!animated && (
           <CommandBar
             ref={commandRef}
             onAdd={addRaw}
+            onHelp={() => setHelpOpen(true)}
             env={built.env}
             onShare={handleShare}
             activePlane={activePlane}
@@ -564,6 +592,7 @@ export default function App() {
           onAdd={addAnimatedRaw}
           env={animatedBuilt.env}
         />
+        {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
       </main>
       </TooltipProvider>
     </ErrorBoundary>

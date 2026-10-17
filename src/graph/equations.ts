@@ -12,6 +12,8 @@ export interface EquationSpec {
   color?: string
   dash?: LineDash
   lineWidth?: number
+  /** Folder name in the legend; undefined = ungrouped. */
+  group?: string
 }
 
 export interface BuildResult {

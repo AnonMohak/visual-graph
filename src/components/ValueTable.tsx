@@ -28,7 +28,7 @@ export function ValueTable({ equations, onClose, className }: ValueTableProps) {
   return (
     <div
       className={cn(
-        'absolute bottom-32 left-3 z-10 flex w-64 flex-col gap-1.5 rounded-lg border bg-background/90 p-2 text-xs backdrop-blur-md',
+        'absolute bottom-32 left-3 z-10 flex w-64 max-sm:inset-x-2 max-sm:w-auto flex-col gap-1.5 rounded-lg border bg-background/90 p-2 text-xs backdrop-blur-md',
         className
       )}
     >

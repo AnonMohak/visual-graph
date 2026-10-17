@@ -53,6 +53,7 @@ interface CommandBarProps {
   onPlaneSwitch?: (plane: Plane) => void
   /** User definitions (constants, functions) visible to new equations. */
   env?: Env
+  onHelp?: () => void
 }
 
 export interface CommandBarApi {
@@ -89,6 +90,7 @@ export function CommandBar({
   onComponentChange,
   onPlaneSwitch,
   env = EMPTY_ENV,
+  onHelp,
 }: CommandBarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -411,6 +413,8 @@ export function CommandBar({
             reset
             <Kbd className="font-mono">f</Kbd>
             fit
+            <Kbd className="font-mono">?</Kbd>
+            help
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
@@ -432,6 +436,11 @@ export function CommandBar({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          {onHelp && (
+            <Button variant="outline" size="sm" aria-label="help" onClick={onHelp} className="md:hidden">
+              ?
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleShare}>
             <Share2Icon data-icon="inline-start" />
             share

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { EyeIcon, EyeOffIcon, GripVerticalIcon, PaletteIcon, XIcon } from 'lucide-react'
+import { ChevronDownIcon, EyeIcon, EyeOffIcon, FolderIcon, GripVerticalIcon, PaletteIcon, XIcon } from 'lucide-react'
 import { ParamSlider } from '@/components/ParamSlider'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -24,6 +24,8 @@ interface LegendProps {
   onUpdate?: (id: string, patch: SpecPatch) => void
   /** Move the equation `id` to the position of `targetId`. */
   onMove?: (id: string, targetId: string) => void
+  /** Show/hide all equations, or all in one folder (null = ungrouped). */
+  onSetVisibility?: (visible: boolean, group?: string | null) => void
   className?: string
   /** Live global sampler props — badges reflect these, not stale per-equation defaults. */
   sigma?: number
@@ -35,7 +37,9 @@ const DASHES: LineDash[] = ['solid', 'dashed', 'dotted']
 function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
   return (
     <Tooltip>
-      <TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={label} onClick={onClick} />}>
+      <TooltipTrigger
+        render={<Button variant="ghost" size="icon-xs" aria-label={label} onClick={onClick} className="max-sm:size-8" />}
+      >
         {children}
       </TooltipTrigger>
       <TooltipContent>{label}</TooltipContent>
@@ -86,6 +90,19 @@ function StylePanel({ equation, onUpdate }: { equation: Equation; onUpdate: (pat
         ))}
       </div>
       <label className="flex items-center gap-1.5">
+        folder
+        <input
+          aria-label="folder"
+          placeholder="none"
+          defaultValue={equation.group ?? ''}
+          onBlur={(event) => onUpdate({ group: event.target.value.trim().slice(0, 40) || undefined })}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+          }}
+          className="h-6 min-w-0 flex-1 rounded border bg-background px-1 font-mono text-xs text-foreground"
+        />
+      </label>
+      <label className="flex items-center gap-1.5">
         width
         <input
           type="range"
@@ -110,6 +127,7 @@ export function Legend({
   onSetConst,
   onUpdate,
   onMove,
+  onSetVisibility,
   className,
   sigma = 0.5,
   component = 're',
@@ -118,7 +136,34 @@ export function Legend({
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
   const [styling, setStyling] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set())
+  // Bottom sheet on phones starts collapsed so the graph stays visible.
+  const [sheetOpen, setSheetOpen] = useState(
+    () => typeof window === 'undefined' || !window.matchMedia?.('(max-width: 639px)').matches
+  )
   if (equations.length === 0) return null
+
+  const groups: { name: string | null; items: Equation[] }[] = []
+  for (const equation of equations) {
+    const name = equation.group ?? null
+    let entry = groups.find((group) => group.name === name)
+    if (!entry) {
+      entry = { name, items: [] }
+      // Ungrouped curves stay on top.
+      if (name === null) groups.unshift(entry)
+      else groups.push(entry)
+    }
+    entry.items.push(equation)
+  }
+  const allVisible = equations.every((equation) => equation.visible)
+
+  const toggleGroup = (name: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
 
   const commitEdit = () => {
     if (editing && editing.text.trim()) onUpdate?.(editing.id, { raw: editing.text.trim() })
@@ -129,17 +174,66 @@ export function Legend({
     <div
       className={cn(
         'absolute right-3 top-3 z-10 flex w-64 flex-col rounded-lg border bg-background/80 backdrop-blur-md',
+        'max-sm:inset-x-2 max-sm:top-auto max-sm:bottom-[132px] max-sm:w-auto',
         className
       )}
     >
-      <div className="flex items-center justify-between px-2.5 py-1.5 text-[11px] text-muted-foreground">
-        <span>curves</span>
-        <span className="font-mono tabular-nums">{equations.length}</span>
+      <div className="flex items-center justify-between gap-1 px-2.5 py-1 text-[11px] text-muted-foreground">
+        <button
+          type="button"
+          className="flex items-center gap-1 max-sm:min-h-8"
+          aria-expanded={sheetOpen}
+          onClick={() => setSheetOpen((prev) => !prev)}
+        >
+          <ChevronDownIcon className={cn('size-3 transition-transform', !sheetOpen && '-rotate-90')} />
+          curves
+          <span className="font-mono tabular-nums">{equations.length}</span>
+        </button>
+        {onSetVisibility && (
+          <button
+            type="button"
+            className="rounded px-1.5 py-0.5 hover:bg-muted max-sm:min-h-8"
+            onClick={() => onSetVisibility(!allVisible)}
+          >
+            {allVisible ? 'hide all' : 'show all'}
+          </button>
+        )}
       </div>
-      <Separator />
-      <ScrollArea className="max-h-[45vh]">
+      {sheetOpen && <Separator />}
+      {sheetOpen && (
+      <ScrollArea className="max-h-[45vh] max-sm:max-h-[35vh]">
         <ul className="flex flex-col gap-0.5 p-1">
-          {equations.map((equation) => {
+          {groups.map((group) => {
+            const collapsed = group.name !== null && collapsedGroups.has(group.name)
+            const groupVisible = group.items.every((equation) => equation.visible)
+            return (
+              <li key={group.name ?? ''} className="flex flex-col gap-0.5">
+                {group.name !== null && (
+                  <div className="flex items-center gap-1 px-1 pt-1 text-[11px] text-muted-foreground">
+                    <button
+                      type="button"
+                      className="flex min-w-0 flex-1 items-center gap-1 text-left max-sm:min-h-8"
+                      aria-expanded={!collapsed}
+                      onClick={() => toggleGroup(group.name as string)}
+                    >
+                      <ChevronDownIcon className={cn('size-3 shrink-0 transition-transform', collapsed && '-rotate-90')} />
+                      <FolderIcon className="size-3 shrink-0" />
+                      <span className="truncate">{group.name}</span>
+                      <span className="font-mono">{group.items.length}</span>
+                    </button>
+                    {onSetVisibility && (
+                      <IconButton
+                        label={groupVisible ? 'hide folder' : 'show folder'}
+                        onClick={() => onSetVisibility(!groupVisible, group.name)}
+                      >
+                        {groupVisible ? <EyeIcon data-icon="inline-start" /> : <EyeOffIcon data-icon="inline-start" />}
+                      </IconButton>
+                    )}
+                  </div>
+                )}
+                {!collapsed && (
+                <ul className={cn('flex flex-col gap-0.5', group.name !== null && 'border-l pl-1 ml-2')}>
+          {group.items.map((equation) => {
             const hasPoints = status[equation.id]
             const slider = sliderOf(equation.raw)
             const isEditing = editing?.id === equation.id
@@ -240,8 +334,14 @@ export function Legend({
               </li>
             )
           })}
+                </ul>
+                )}
+              </li>
+            )
+          })}
         </ul>
       </ScrollArea>
+      )}
     </div>
   )
 }
