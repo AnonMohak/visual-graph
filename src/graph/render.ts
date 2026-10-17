@@ -1,3 +1,4 @@
+import { slopeAt, type Feature } from './analysis'
 import type { GraphColors } from './color'
 import type { AreaInfo, CurveSamples, EvaluateFn, Viewport } from './types'
 import { formatNumber, formatTick, niceStep, screenToWorldX, screenToWorldY, worldToScreenX, worldToScreenY } from './viewport'
@@ -36,6 +37,10 @@ export interface RenderState {
   sigmaRef?: number | null
   /** When true, hover crosshair/markers/chips are skipped (animated mode). */
   disableHover?: boolean
+  /** Roots, extrema, inflections and intersections to mark. */
+  features?: Feature[]
+  /** Draw the tangent line of each curve at the hover x. */
+  tangent?: boolean
 }
 
 export const ZERO_TS = [14.1347, 21.022, 25.0109]
@@ -361,6 +366,96 @@ function drawMarkers(ctx: CanvasRenderingContext2D, state: RenderState): void {
   }
 }
 
+const FEATURE_LABEL: Record<Feature['type'], string> = {
+  root: 'root',
+  max: 'max',
+  min: 'min',
+  inflection: 'inflection',
+  intersection: 'intersection',
+}
+
+function drawChip(ctx: CanvasRenderingContext2D, state: RenderState, text: string, x: number, y: number, color: string): void {
+  const { width, height, colors } = state
+  ctx.save()
+  ctx.font = `10px ${MONO_FONT}`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+  const boxW = ctx.measureText(text).width + 10
+  const boxH = 15
+  let boxX = x + 10
+  if (boxX + boxW > width - 4) boxX = x - 10 - boxW
+  const boxY = Math.min(Math.max(y - boxH - 8, 4), height - boxH - 4)
+  ctx.globalAlpha = 0.9
+  ctx.fillStyle = colors.background
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = color
+  ctx.lineWidth = 1
+  ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1)
+  ctx.fillStyle = color
+  ctx.fillText(text, boxX + 5, boxY + boxH / 2)
+  ctx.restore()
+}
+
+function drawFeatures(ctx: CanvasRenderingContext2D, state: RenderState): void {
+  const features = state.features
+  if (!features?.length) return
+  const { viewport: vp, colors } = state
+  const hover = state.disableHover ? null : state.hover
+  let nearest: { feature: Feature; sx: number; sy: number } | null = null
+  let nearestDist = 10
+  for (const feature of features) {
+    const sx = worldToScreenX(vp, feature.x)
+    const sy = worldToScreenY(vp, feature.y)
+    const color = feature.type === 'intersection' ? colors.accent : colors.charts[feature.colorIndex % colors.charts.length]
+    ctx.beginPath()
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2)
+    ctx.fillStyle = colors.background
+    ctx.fill()
+    ctx.lineWidth = 2
+    ctx.strokeStyle = color
+    ctx.stroke()
+    if (hover) {
+      const dist = Math.hypot(sx - hover.x, sy - hover.y)
+      if (dist < nearestDist) {
+        nearestDist = dist
+        nearest = { feature, sx, sy }
+      }
+    }
+  }
+  if (nearest) {
+    const { feature, sx, sy } = nearest
+    const color = feature.type === 'intersection' ? colors.accent : colors.charts[feature.colorIndex % colors.charts.length]
+    drawChip(ctx, state, `${FEATURE_LABEL[feature.type]} (${formatNumber(feature.x, 4)}, ${formatNumber(feature.y, 4)})`, sx, sy, color)
+  }
+}
+
+function drawTangents(ctx: CanvasRenderingContext2D, state: RenderState): void {
+  if (!state.tangent || !state.hover || state.disableHover) return
+  const { viewport: vp, colors, width } = state
+  const x = screenToWorldX(vp, state.hover.x)
+  for (const curve of state.curves) {
+    if (!curve.visible) continue
+    const y = curve.evaluate(x)
+    const m = y === null ? null : slopeAt(curve.evaluate, x)
+    if (y === null || m === null || !Number.isFinite(m)) continue
+    const color = colors.charts[curve.colorIndex % colors.charts.length]
+    const x0 = screenToWorldX(vp, 0)
+    const x1 = screenToWorldX(vp, width)
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.globalAlpha = 0.8
+    ctx.lineWidth = 1.25
+    ctx.setLineDash([3, 3])
+    ctx.beginPath()
+    ctx.moveTo(0, worldToScreenY(vp, y + m * (x0 - x)))
+    ctx.lineTo(width, worldToScreenY(vp, y + m * (x1 - x)))
+    ctx.stroke()
+    ctx.restore()
+    drawChip(ctx, state, `m=${formatNumber(m, 4)}`, worldToScreenX(vp, x), worldToScreenY(vp, y) + 34, color)
+  }
+}
+
 function drawSigmaRef(ctx: CanvasRenderingContext2D, state: RenderState): void {
   if (state.sigmaRef === null || state.sigmaRef === undefined) return
   const { colors, height } = state
@@ -474,6 +569,8 @@ export function drawGraph(ctx: CanvasRenderingContext2D, state: RenderState): vo
   drawAxesAndLabels(ctx, state)
   if (state.field) drawZeroMarkers(ctx, state)
   drawCurves(ctx, state)
+  drawTangents(ctx, state)
+  drawFeatures(ctx, state)
   drawCrosshair(ctx, state)
   drawSnap(ctx, state)
   drawMarkers(ctx, state)

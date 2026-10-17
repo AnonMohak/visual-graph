@@ -96,6 +96,18 @@ and operators `+ - * / ^ ( )`.
 - **"no real points in view"** under a legend entry means the curve has no
   plottable values in the current viewport — pan/zoom or press `f` to fit.
 
+## Analysis
+
+The toolbar under the theme switch (xy plane) has three toggles:
+
+- **points**: mark roots, local maxima and minima, inflection points, and
+  intersections of visible curves. Hover a mark to see its coordinates.
+  Click a mark to snap the readout to its x.
+- **tangent**: draw the tangent line of each curve at the cursor, with its
+  slope `m`.
+- **table**: show a table of x and f(x) for a curve, with your own range and
+  step.
+
 ## Navigating the canvas
 
 | Action                | How                              |

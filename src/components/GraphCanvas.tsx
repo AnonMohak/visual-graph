@@ -15,6 +15,7 @@ import {
 } from '@/graph/animated'
 import { resolveGraphColors, type GraphColors } from '@/graph/color'
 import { setZetaCoarse } from '@/graph/complex'
+import { findFeatures, findIntersections, type Feature } from '@/graph/analysis'
 import { computeFieldImage } from '@/graph/field'
 import { sampleImplicit } from '@/graph/implicit'
 import { drawField, drawGraph, drawParametric, type RenderCurve } from '@/graph/render'
@@ -77,7 +78,13 @@ interface GraphCanvasProps {
   onFieldSourceChange?: (id: string | null) => void
   /** Definition raws so the field worker can rebuild user functions. */
   defRaws?: string[]
+  /** Mark roots/extrema/inflections/intersections and draw hover tangents. */
+  analysis?: { points: boolean; tangent: boolean }
+  /** Clicking a marked point snaps the readout to its x. */
+  onSnap?: (x: number) => void
 }
+
+const NO_ANALYSIS = { points: false, tangent: false }
 
 interface SampleEntry {
   sig: string
@@ -163,6 +170,8 @@ export function GraphCanvas({
   fieldSourceId: controlledFieldId,
   onFieldSourceChange,
   defRaws = [],
+  analysis = NO_ANALYSIS,
+  onSnap,
 }: GraphCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const fieldCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -183,6 +192,10 @@ export function GraphCanvas({
   const draggingRef = useRef(false)
   const equationsRef = useRef(equations.filter((eq) => eq.plot))
   const defRawsRef = useRef(defRaws)
+  const analysisRef = useRef(analysis)
+  const onSnapRef = useRef(onSnap)
+  const featuresRef = useRef<{ sig: string; features: Feature[] }>({ sig: '', features: [] })
+  const pressRef = useRef<{ x: number; y: number } | null>(null)
   const snapRef = useRef(snapX)
   const drawTimeRef = useRef(drawTime)
   const unitsPerSecRef = useRef(unitsPerSec)
@@ -587,6 +600,31 @@ export function GraphCanvas({
     return list
   }
 
+  /** Features for real curves; cached until the view or a curve changes. */
+  const computeFeatures = (curves: RenderCurve[], w: number): Feature[] => {
+    const vp = viewportRef.current
+    const real = new Set(equationsRef.current.filter((eq) => eq.kind === 'real').map((eq) => eq.id))
+    const list = curves.filter((curve) => curve.visible && real.has(curve.id))
+    const sig = `${vp.scale}|${Math.round(vp.originX)}|${Math.round(vp.originY)}|${w}|${list
+      .map((curve) => `${curve.id}:${equationsRef.current.find((eq) => eq.id === curve.id)?.rev}`)
+      .join(',')}`
+    if (featuresRef.current.sig === sig) return featuresRef.current.features
+    // Accept |f| up to two pixels at a root: rejects sign flips across poles.
+    const tolerance = 2 / vp.scale
+    const xMin = screenToWorldX(vp, 0)
+    const xMax = screenToWorldX(vp, w)
+    const features: Feature[] = []
+    for (const curve of list) features.push(...findFeatures(curve.evaluate, curve.samples.segments, curve.colorIndex, tolerance))
+    const pairs = list.slice(0, 6)
+    for (let i = 0; i < pairs.length; i++) {
+      for (let j = i + 1; j < pairs.length; j++) {
+        features.push(...findIntersections(pairs[i].evaluate, pairs[j].evaluate, xMin, xMax, tolerance, pairs[i].colorIndex))
+      }
+    }
+    featuresRef.current = { sig, features }
+    return features
+  }
+
   const updateFollowCam = () => {
     const drawTime = drawTimeRef.current
     if (drawTime === undefined) return
@@ -735,6 +773,9 @@ export function GraphCanvas({
     const labels = pl === 'reim' ? { x: 'Re', y: 'Im' } : equationsRef.current.some((e) => e.kind === 'complex-slice' || e.kind === 'complex-param')
       ? { x: 't', y: 'y' }
       : { x: 'x', y: 'y' }
+    const features = pl === 'xy' && drawTimeRef.current === undefined && analysisRef.current.points
+      ? computeFeatures(curves, w)
+      : []
     const base = {
       width: w,
       height: h,
@@ -742,6 +783,8 @@ export function GraphCanvas({
       viewport: viewportRef.current,
       colors: colorsRef.current,
       curves,
+      features,
+      tangent: pl === 'xy' && analysisRef.current.tangent,
       hover: disableHoverRef.current ? null : hoverScreenRef.current,
       snapX: snapRef.current,
       labels,
@@ -962,6 +1005,8 @@ export function GraphCanvas({
   useEffect(() => {
     equationsRef.current = equations.filter((eq) => eq.plot)
     defRawsRef.current = defRaws
+    analysisRef.current = analysis
+    onSnapRef.current = onSnap
     snapRef.current = snapX
     drawTimeRef.current = drawTime
     unitsPerSecRef.current = unitsPerSec
@@ -1025,6 +1070,7 @@ export function GraphCanvas({
     if (canvas.setPointerCapture) canvas.setPointerCapture(event.pointerId)
     const point = localPoint(event)
     pointersRef.current.set(event.pointerId, point)
+    pressRef.current = pointersRef.current.size === 1 ? point : null
     if (pointersRef.current.size === 1) {
       dragRef.current = { active: true, id: event.pointerId, x: point.x, y: point.y }
       draggingRef.current = true
@@ -1077,7 +1123,27 @@ export function GraphCanvas({
     if (event.pointerType === 'mouse' && !disableHoverRef.current) setHover(point)
   }
 
+  const snapToFeature = (point: { x: number; y: number }) => {
+    const vp = viewportRef.current
+    let best: Feature | null = null
+    let bestDist = 10
+    for (const feature of featuresRef.current.features) {
+      const dist = Math.hypot(vp.originX + feature.x * vp.scale - point.x, vp.originY - feature.y * vp.scale - point.y)
+      if (dist < bestDist) {
+        bestDist = dist
+        best = feature
+      }
+    }
+    if (best) onSnapRef.current?.(Number(best.x.toPrecision(10)))
+  }
+
   const endPointer = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const press = pressRef.current
+    pressRef.current = null
+    if (press && event.type === 'pointerup' && analysisRef.current.points) {
+      const point = localPoint(event)
+      if (Math.hypot(point.x - press.x, point.y - press.y) < 4) snapToFeature(point)
+    }
     const canvas = canvasRef.current
     pointersRef.current.delete(event.pointerId)
     if (canvas && canvas.releasePointerCapture) {

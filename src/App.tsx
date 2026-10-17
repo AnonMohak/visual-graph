@@ -10,7 +10,9 @@ import { GraphCanvas, type GraphApi } from '@/components/GraphCanvas'
 import { Legend } from '@/components/Legend'
 import { PlaneToggle } from '@/components/PlaneToggle'
 import { ReadoutPanel } from '@/components/ReadoutPanel'
+import { ToggleBar } from '@/components/ToggleBar'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { ValueTable } from '@/components/ValueTable'
 import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete } from '@/graph/animated'
 import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/graph/equations'
 import { formatSliderValue, sliderOf } from '@/graph/sliders'
@@ -112,6 +114,8 @@ export default function App() {
     document.documentElement.dataset.graphTheme = theme
   }, [theme])
   const [snapX, setSnapX] = useState<number | null>(null)
+  const [analysis, setAnalysis] = useState({ points: false, tangent: false })
+  const [tableOpen, setTableOpen] = useState(false)
   const graphRef = useRef<GraphApi | null>(null)
   const commandRef = useRef<CommandBarApi | null>(null)
 
@@ -409,6 +413,8 @@ export default function App() {
           component={component}
           theme={theme}
           defRaws={animated ? animatedBuilt.defRaws : built.defRaws}
+          analysis={animated ? undefined : analysis}
+          onSnap={setSnapX}
         />
         <div
           role="tablist"
@@ -431,6 +437,22 @@ export default function App() {
             </button>
           ))}
         </div>
+        {!animated && activePlane === 'xy' && (
+          <ToggleBar
+            label="analysis"
+            className="absolute left-1/2 top-[132px] z-10 -translate-x-1/2"
+            options={[
+              { key: 'points', label: 'points', title: 'mark roots, extrema, inflections, intersections', active: analysis.points },
+              { key: 'tangent', label: 'tangent', title: 'tangent line at the cursor', active: analysis.tangent },
+              { key: 'table', label: 'table', title: 'table of values', active: tableOpen },
+            ]}
+            onToggle={(key) => {
+              if (key === 'table') setTableOpen((prev) => !prev)
+              else setAnalysis((prev) => ({ ...prev, [key]: !prev[key as 'points' | 'tangent'] }))
+            }}
+          />
+        )}
+        {!animated && tableOpen && <ValueTable equations={plotted} onClose={() => setTableOpen(false)} />}
         {activeEquations.length === 0 && <EmptyGraph />}
         {!animated && (
           <ReadoutPanel
