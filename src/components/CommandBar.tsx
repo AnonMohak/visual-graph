@@ -42,7 +42,7 @@ interface Notice {
 
 interface CommandBarProps {
   onAdd: (raws: string[]) => void
-  onShare?: () => string | null
+  onShare?: () => Promise<string | null> | string | null
   className?: string
   ref?: React.Ref<CommandBarApi>
   activePlane?: Plane
@@ -54,6 +54,14 @@ interface CommandBarProps {
   /** User definitions (constants, functions) visible to new equations. */
   env?: Env
   onHelp?: () => void
+  onExportImage?: (kind: 'png' | 'svg') => void
+  /** Returns false when there is nothing to export. */
+  onExportJson?: () => boolean
+  /** Resolves false when the file is not a valid graph. */
+  onImportJson?: (file: File) => Promise<boolean>
+  /** Returns iframe HTML for embedding, or null. */
+  onEmbed?: () => Promise<string | null>
+  onLibrary?: () => void
 }
 
 export interface CommandBarApi {
@@ -91,8 +99,14 @@ export function CommandBar({
   onPlaneSwitch,
   env = EMPTY_ENV,
   onHelp,
+  onExportImage,
+  onExportJson,
+  onImportJson,
+  onEmbed,
+  onLibrary,
 }: CommandBarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
   const timerRef = useRef<number | null>(null)
   const [value, setValue] = useState('')
   const [storedNotice, setStoredNotice] = useState<Notice | null>(null)
@@ -233,7 +247,7 @@ export function CommandBar({
   const handleShare = async () => {
     let url: string | null = null
     try {
-      url = onShare?.() ?? null
+      url = (await onShare?.()) ?? null
     } catch {
       url = null
     }
@@ -255,6 +269,36 @@ export function CommandBar({
     } else {
       setNotice('error', 'could not copy the share link')
     }
+  }
+
+  const copyText = async (text: string): Promise<boolean> => {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text)
+        return true
+      } catch {
+        // Fall through to legacy copy path.
+      }
+    }
+    return copyFallback(text)
+  }
+
+  const handleEmbed = async () => {
+    const html = await onEmbed?.()
+    if (!html) {
+      setNotice('error', 'nothing to embed yet — add an equation first')
+      return
+    }
+    if (await copyText(html)) setNotice('info', 'embed code copied')
+    else setNotice('error', 'could not copy the embed code')
+  }
+
+  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !onImportJson) return
+    if (await onImportJson(file)) setNotice('info', `loaded ${file.name}`)
+    else setNotice('error', `${file.name} is not a graph file`)
   }
 
   const handleSample = (sample: string) => {
@@ -436,6 +480,47 @@ export function CommandBar({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
+          {(onExportImage || onLibrary) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
+                file
+                <ChevronDownIcon data-icon="inline-end" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>graph</DropdownMenuLabel>
+                  {onLibrary && <DropdownMenuItem onClick={onLibrary}>saved graphs…</DropdownMenuItem>}
+                  {onExportJson && (
+                    <DropdownMenuItem
+                      onClick={() => {
+                        if (!onExportJson()) setNotice('error', 'nothing to export yet — add an equation first')
+                      }}
+                    >
+                      export JSON
+                    </DropdownMenuItem>
+                  )}
+                  {onImportJson && (
+                    <DropdownMenuItem onClick={() => fileRef.current?.click()}>import JSON…</DropdownMenuItem>
+                  )}
+                </DropdownMenuGroup>
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>image</DropdownMenuLabel>
+                  {onExportImage && <DropdownMenuItem onClick={() => onExportImage('png')}>export PNG</DropdownMenuItem>}
+                  {onExportImage && <DropdownMenuItem onClick={() => onExportImage('svg')}>export SVG</DropdownMenuItem>}
+                  {onEmbed && <DropdownMenuItem onClick={handleEmbed}>copy embed code</DropdownMenuItem>}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            aria-hidden
+            tabIndex={-1}
+            onChange={handleImport}
+          />
           {onHelp && (
             <Button variant="outline" size="sm" aria-label="help" onClick={onHelp} className="md:hidden">
               ?

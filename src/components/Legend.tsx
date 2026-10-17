@@ -17,7 +17,8 @@ export type SpecPatch = Partial<Omit<EquationSpec, 'id'>>
 interface LegendProps {
   equations: Equation[]
   onToggle: (id: string) => void
-  onDelete: (id: string) => void
+  /** Omitted in read-only (embed) mode. */
+  onDelete?: (id: string) => void
   /** Set a slider constant to a new value. */
   onSetConst?: (id: string, value: number) => void
   /** Change text or style of one equation. */
@@ -297,9 +298,11 @@ export function Legend({
                   <IconButton label={equation.visible ? 'hide' : 'show'} onClick={() => onToggle(equation.id)}>
                     {equation.visible ? <EyeIcon data-icon="inline-start" /> : <EyeOffIcon data-icon="inline-start" />}
                   </IconButton>
-                  <IconButton label="delete" onClick={() => onDelete(equation.id)}>
-                    <XIcon data-icon="inline-start" />
-                  </IconButton>
+                  {onDelete && (
+                    <IconButton label="delete" onClick={() => onDelete(equation.id)}>
+                      <XIcon data-icon="inline-start" />
+                    </IconButton>
+                  )}
                 </div>
                 {styling === equation.id && onUpdate && (
                   <StylePanel equation={equation} onUpdate={(patch) => onUpdate(equation.id, patch)} />

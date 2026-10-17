@@ -8,6 +8,7 @@ import { EmptyGraph } from '@/components/EmptyGraph'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { GraphCanvas, type GraphApi } from '@/components/GraphCanvas'
 import { HelpOverlay } from '@/components/HelpOverlay'
+import { LibraryPanel } from '@/components/LibraryPanel'
 import { Legend, type SpecPatch } from '@/components/Legend'
 import { PlaneToggle } from '@/components/PlaneToggle'
 import { ReadoutPanel } from '@/components/ReadoutPanel'
@@ -20,7 +21,17 @@ import { DRAW_UNITS_PER_SEC, drawDuration, isDrawComplete } from '@/graph/animat
 import { buildEquations, newSpecId, nextColorToken, type EquationSpec } from '@/graph/equations'
 import { initHistory, record, redo, undo } from '@/graph/history'
 import { formatSliderValue, sliderOf } from '@/graph/sliders'
-import { decodeShareState, encodeShareState, parseStyle, shareVpToViewport, styleOf, type ShareStyle } from '@/graph/share'
+import { downloadBlob, graphFromJson, graphToJson } from '@/graph/library'
+import {
+  decodeShareHash,
+  decodeShareState,
+  encodeShareCompressed,
+  parseStyle,
+  shareVpToViewport,
+  styleOf,
+  type ShareState,
+  type ShareStyle,
+} from '@/graph/share'
 import type { ComplexComponent, Plane, Viewport } from '@/graph/types'
 import { niceStep } from '@/graph/viewport'
 
@@ -147,6 +158,8 @@ export default function App() {
   const [analysis, setAnalysis] = useState({ points: false, tangent: false })
   const [tableOpen, setTableOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [embed] = useState(() => new URLSearchParams(window.location.search).has('embed'))
   const graphRef = useRef<GraphApi | null>(null)
   const commandRef = useRef<CommandBarApi | null>(null)
 
@@ -326,40 +339,95 @@ export default function App() {
     return viewport ? niceStep(viewport.scale) / 5 : 1
   }
 
-  const handleShare = (): string | null => {
+  const toShareVp = (vp: Viewport | null | undefined) =>
+    vp ? { s: vp.scale, ox: vp.originX, oy: vp.originY } : null
+
+  /** The current graph as a share state (equations, view, complex settings). */
+  const currentState = (): ShareState | null => {
     if (specs.length === 0) return null
     const viewport = graphRef.current?.getViewport()
     if (!viewport) return null
     const homes = graphRef.current?.getHomes()
+    return {
+      eq: specs.map((spec) => spec.raw),
+      vp: toShareVp(viewport),
+      plane: activePlane,
+      sigma,
+      comp: component,
+      vis: specs.map((spec) => (spec.visible ? 1 : 0)),
+      col: specs.map((spec) => spec.colorToken),
+      sty: specs.map(styleOf),
+      grp: specs.map((spec) => spec.group ?? ''),
+      homes: homes ? { xy: toShareVp(homes.xy), st: toShareVp(homes.st), reim: toShareVp(homes.reim) } : undefined,
+    }
+  }
+
+  const linkFor = async (extraSearch = ''): Promise<string | null> => {
+    const state = currentState()
+    if (!state) return null
     try {
-      const payload = encodeShareState({
-        eq: specs.map((spec) => spec.raw),
-        vp: { s: viewport.scale, ox: viewport.originX, oy: viewport.originY },
-        plane: activePlane,
-        sigma,
-        comp: component,
-        vis: specs.map((spec) => (spec.visible ? 1 : 0)),
-        col: specs.map((spec) => spec.colorToken),
-        sty: specs.map(styleOf),
-        grp: specs.map((spec) => spec.group ?? ''),
-        homes: homes
-          ? {
-              xy: homes.xy ? { s: homes.xy.scale, ox: homes.xy.originX, oy: homes.xy.originY } : null,
-              st: homes.st ? { s: homes.st.scale, ox: homes.st.originX, oy: homes.st.originY } : null,
-              reim: homes.reim
-                ? { s: homes.reim.scale, ox: homes.reim.originX, oy: homes.reim.originY }
-                : null,
-            }
-          : undefined,
-      })
-      const { origin, pathname, search } = window.location
-      return `${origin}${pathname}${search}#${payload}`
+      const payload = await encodeShareCompressed(state)
+      const { origin, pathname } = window.location
+      return `${origin}${pathname}${extraSearch}#${payload}`
     } catch {
       return null
     }
   }
 
+  const handleShare = () => linkFor()
+
+  const handleEmbed = async () => {
+    const url = await linkFor('?embed=1')
+    return url ? `<iframe src="${url}" width="640" height="420" style="border:0" title="graph"></iframe>` : null
+  }
+
+  /** Load a whole graph (library, import, compressed link) as one undoable step. */
+  const applyState = (state: ShareState, opts: { undoable: boolean } = { undoable: true }) => {
+    const nextSpecs = specsFromRaws(state.eq, state.vis, state.col, state.sty, state.grp)
+    if (opts.undoable) setSpecs(() => nextSpecs)
+    else setHistory(initHistory(nextSpecs))
+    if (mode !== 'static') switchMode('static')
+    setActivePlane(state.plane ?? 'xy')
+    setSigma(typeof state.sigma === 'number' ? state.sigma : 0.5)
+    setComponent(state.comp ?? 're')
+    requestAnimationFrame(() => applyViewports(state))
+  }
+
+  // Restore homes first so plane switch can use them, then the active viewport.
+  const applyViewports = (state: ShareState) => {
+    if (state.homes) {
+      const converted: Partial<Record<Plane, Viewport>> = {}
+      if (state.homes.xy) converted.xy = shareVpToViewport(state.homes.xy)
+      if (state.homes.st) converted.st = shareVpToViewport(state.homes.st)
+      if (state.homes.reim) converted.reim = shareVpToViewport(state.homes.reim)
+      graphRef.current?.setHomes(converted)
+    }
+    if (state.plane && state.plane !== 'xy') graphRef.current?.switchPlane(state.plane)
+    if (state.vp) graphRef.current?.setViewport(shareVpToViewport(state.vp))
+  }
+
+  const exportImage = async (kind: 'png' | 'svg') => {
+    const blob = await graphRef.current?.exportImage(kind)
+    if (blob) downloadBlob(blob, `graph.${kind}`)
+  }
+
+  const exportJson = () => {
+    const state = currentState()
+    if (!state) return false
+    downloadBlob(new Blob([graphToJson(state)], { type: 'application/json' }), 'graph.json')
+    return true
+  }
+
+  const importJson = async (file: File) => {
+    const state = graphFromJson(await file.text())
+    if (!state) return false
+    applyState(state)
+    return true
+  }
+
   useEffect(() => {
+    // Embedded graphs must not overwrite the visitor's own saved work.
+    if (embed) return
     try {
       const payload: PersistedV2 = {
         eq: specs.map((spec) => spec.raw),
@@ -375,39 +443,29 @@ export default function App() {
     } catch {
       // Storage full / unavailable — equations stay in memory only.
     }
-  }, [specs, activePlane, sigma, component])
+  }, [specs, activePlane, sigma, component, embed])
 
   useEffect(() => {
-    const state = decodeShareState(window.location.hash)
-    if (!state) return
-    if (state.plane && state.plane !== 'xy') {
-      setActivePlane(state.plane)
+    const hash = window.location.hash
+    if (!hash || hash.length < 2) return
+    let cancelled = false
+    decodeShareHash(hash).then((state) => {
+      if (!state || cancelled) return
+      // Plain links were loaded synchronously; compressed ones load here.
+      if (hash.startsWith('#z')) {
+        applyState(state, { undoable: false })
+        return
+      }
+      if (state.plane && state.plane !== 'xy') setActivePlane(state.plane)
+      if (typeof state.sigma === 'number') setSigma(state.sigma)
+      if (state.comp) setComponent(state.comp)
+      // Canvas sizes on first frame; defer one tick.
+      requestAnimationFrame(() => applyViewports(state))
+    })
+    return () => {
+      cancelled = true
     }
-    if (typeof state.sigma === 'number') setSigma(state.sigma)
-    if (state.comp) setComponent(state.comp)
-    // Restore homes first so plane switch can use them, then active viewport.
-    const applyViewports = () => {
-      if (state.homes) {
-        const converted: Partial<Record<Plane, Viewport>> = {}
-        if (state.homes.xy) converted.xy = shareVpToViewport(state.homes.xy)
-        if (state.homes.st) converted.st = shareVpToViewport(state.homes.st)
-        if (state.homes.reim) converted.reim = shareVpToViewport(state.homes.reim)
-        graphRef.current?.setHomes(converted)
-      }
-      if (state.plane && state.plane !== 'xy') {
-        graphRef.current?.switchPlane(state.plane)
-      }
-      if (state.vp) {
-        graphRef.current?.setViewport({
-          scale: state.vp.s,
-          originX: state.vp.ox,
-          originY: state.vp.oy,
-        })
-      }
-    }
-    // Canvas sizes on first frame; defer one tick.
-    const id = requestAnimationFrame(applyViewports)
-    return () => cancelAnimationFrame(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -494,6 +552,7 @@ export default function App() {
           analysis={animated ? undefined : analysis}
           onSnap={setSnapX}
         />
+        {!embed && (
         <div
           role="tablist"
           aria-label="graph theme"
@@ -515,7 +574,8 @@ export default function App() {
             </button>
           ))}
         </div>
-        {!animated && activePlane === 'xy' && (
+        )}
+        {!embed && !animated && activePlane === 'xy' && (
           <ToggleBar
             label="analysis"
             className="absolute left-1/2 top-[132px] z-10 -translate-x-1/2"
@@ -548,14 +608,29 @@ export default function App() {
             component={component}
           />
         )}
-        <AnimatedModeToggle mode={mode} onChange={switchMode} />
-        <PlaneToggle plane={activePlane} onChange={switchPlane} />
-        <Legend equations={activeEquations} onToggle={toggleEquation} onDelete={deleteEquation} onSetConst={setConst} onUpdate={updateEquation} onMove={moveEquation} onSetVisibility={setVisibility} sigma={sigma} component={component} />
-        {!animated && (
+        {!embed && <AnimatedModeToggle mode={mode} onChange={switchMode} />}
+        {!embed && <PlaneToggle plane={activePlane} onChange={switchPlane} />}
+        <Legend
+          equations={activeEquations}
+          onToggle={toggleEquation}
+          onDelete={embed ? undefined : deleteEquation}
+          onSetConst={setConst}
+          onUpdate={embed ? undefined : updateEquation}
+          onMove={embed ? undefined : moveEquation}
+          onSetVisibility={setVisibility}
+          sigma={sigma}
+          component={component}
+        />
+        {!embed && !animated && (
           <CommandBar
             ref={commandRef}
             onAdd={addRaw}
             onHelp={() => setHelpOpen(true)}
+            onExportImage={exportImage}
+            onExportJson={exportJson}
+            onImportJson={importJson}
+            onEmbed={handleEmbed}
+            onLibrary={() => setLibraryOpen((prev) => !prev)}
             env={built.env}
             onShare={handleShare}
             activePlane={activePlane}
@@ -592,6 +667,19 @@ export default function App() {
           onAdd={addAnimatedRaw}
           env={animatedBuilt.env}
         />
+        {libraryOpen && !animated && (
+          <LibraryPanel getState={currentState} onLoad={(state) => applyState(state)} onClose={() => setLibraryOpen(false)} />
+        )}
+        {embed && (
+          <a
+            href={`${window.location.pathname}${window.location.hash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="absolute bottom-3 right-3 z-20 rounded-md border bg-background/85 px-2 py-1 text-xs text-muted-foreground backdrop-blur-md hover:text-foreground"
+          >
+            open in Graph ↗
+          </a>
+        )}
         {helpOpen && <HelpOverlay onClose={() => setHelpOpen(false)} />}
       </main>
       </TooltipProvider>

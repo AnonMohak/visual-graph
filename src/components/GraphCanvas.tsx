@@ -19,7 +19,8 @@ import { findFeatures, findIntersections, type Feature } from '@/graph/analysis'
 import { DEFAULT_VIEW, toLog, transformForAxes, type ViewSettings } from '@/graph/view'
 import { computeFieldImage } from '@/graph/field'
 import { sampleImplicit } from '@/graph/implicit'
-import { drawField, drawGraph, drawParametric, type RenderCurve } from '@/graph/render'
+import { drawField, drawGraph, drawParametric, type RenderCurve, type RenderState } from '@/graph/render'
+import { SvgContext } from '@/graph/svg'
 import { sampleComplexSlice, sampleCurve, sampleParametric, samplePoints } from '@/graph/sampler'
 import { readoutStore, statusStore } from '@/graph/store'
 import { isComplexKind, type ComplexComponent, type CurveSamples, type Equation, type Plane, type Viewport } from '@/graph/types'
@@ -53,6 +54,8 @@ export interface GraphApi {
   getHomes: () => Record<Plane, Viewport | null>
   setHomes: (homes: Partial<Record<Plane, Viewport>>) => void
   applyAnimatedHome: () => void
+  /** Current view as a PNG (raster) or SVG (vector) file. */
+  exportImage: (kind: 'png' | 'svg') => Promise<Blob | null>
 }
 
 interface GraphCanvasProps {
@@ -206,6 +209,7 @@ export function GraphCanvas({
   const onSnapRef = useRef(onSnap)
   const featuresRef = useRef<{ sig: string; features: Feature[] }>({ sig: '', features: [] })
   const pressRef = useRef<{ x: number; y: number } | null>(null)
+  const lastRenderRef = useRef<{ draw: (target: CanvasRenderingContext2D) => void } | null>(null)
   const snapRef = useRef(snapX)
   const drawTimeRef = useRef(drawTime)
   const unitsPerSecRef = useRef(unitsPerSec)
@@ -768,7 +772,7 @@ export function GraphCanvas({
       const status: Record<string, boolean> = {}
       for (const eq of equationsRef.current) status[eq.id] = eq.visible
       publishStatus(status)
-      drawField(ctx, {
+      const fieldState: RenderState = {
         width: w,
         height: h,
         dpr,
@@ -779,7 +783,9 @@ export function GraphCanvas({
         snapX: null,
         labels: { x: 'σ', y: 't' },
         disableHover: disableHoverRef.current,
-      }, fieldCanvas)
+      }
+      lastRenderRef.current = { draw: (target) => drawField(target, fieldState, fieldCanvas) }
+      drawField(ctx, fieldState, fieldCanvas)
       return
     }
     // Per-curve style (custom color, dash, width) from the equation specs.
@@ -809,8 +815,11 @@ export function GraphCanvas({
       sigmaRef: pl === 'reim' ? sigmaRef.current : null,
       disableHover: disableHoverRef.current,
     }
-    if (pl === 'reim') drawParametric(ctx, base)
-    else drawGraph(ctx, base)
+    const drawer = pl === 'reim' ? drawParametric : drawGraph
+    // Snapshot without hover so exports do not include the crosshair.
+    const exportState: RenderState = { ...base, hover: null }
+    lastRenderRef.current = { draw: (target) => drawer(target, exportState) }
+    drawer(ctx, base)
   }
 
   const scheduleDraw = () => {
@@ -1031,6 +1040,19 @@ export function GraphCanvas({
         }
       },
       applyAnimatedHome,
+      exportImage: async (kind) => {
+        const canvas = canvasRef.current
+        if (!canvas) return null
+        if (kind === 'png') {
+          return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+        }
+        const last = lastRenderRef.current
+        if (!last) return null
+        const { w, h } = sizeRef.current
+        const svg = new SvgContext(w, h)
+        last.draw(svg as unknown as CanvasRenderingContext2D)
+        return new Blob([svg.toString()], { type: 'image/svg+xml' })
+      },
     }),
     []
   )

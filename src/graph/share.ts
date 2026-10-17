@@ -137,7 +137,15 @@ export function decodeShareState(hash: string): ShareState | null {
     const trimmed = hash.startsWith('#') ? hash.slice(1) : hash
     if (!trimmed) return null
     const bytes = base64UrlToBytes(trimmed)
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes))
+    return parseSharePayload(JSON.parse(new TextDecoder().decode(bytes)))
+  } catch {
+    return null
+  }
+}
+
+/** Validate an untrusted share payload object (also used for JSON import). */
+export function parseSharePayload(parsed: unknown): ShareState | null {
+  try {
     if (!parsed || typeof parsed !== 'object') return null
     const record = parsed as Record<string, unknown>
     const eqRaw = record.eq
@@ -185,6 +193,40 @@ export function decodeShareState(hash: string): ShareState | null {
       ? (record.grp as unknown[]).slice(0, MAX_EQUATIONS).map((name) => (typeof name === 'string' ? name.slice(0, 40) : ''))
       : undefined
     return { eq, vp, plane, sigma, comp, homes, vis, col, sty, grp }
+  } catch {
+    return null
+  }
+}
+
+/** Plain JSON payload (same fields as the link) for saving and export. */
+export function sharePayload(state: ShareState): Record<string, unknown> {
+  return JSON.parse(new TextDecoder().decode(base64UrlToBytes(encodeShareState(state)))) as Record<string, unknown>
+}
+
+async function pipeBytes(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  const body = new Blob([bytes as BlobPart]).stream().pipeThrough(stream)
+  return new Uint8Array(await new Response(body).arrayBuffer())
+}
+
+/**
+ * Shorter link: deflate the JSON, prefix with `z`. Plain links start with
+ * `eyJ` (base64 of `{"`), so the prefix cannot collide with them.
+ */
+export async function encodeShareCompressed(state: ShareState): Promise<string> {
+  if (typeof CompressionStream === 'undefined') return encodeShareState(state)
+  const json = new TextEncoder().encode(JSON.stringify(sharePayload(state)))
+  const packed = await pipeBytes(json, new CompressionStream('deflate-raw'))
+  return `z${bytesToBase64Url(packed)}`
+}
+
+/** Decode a plain or compressed (`#z...`) share hash. */
+export async function decodeShareHash(hash: string): Promise<ShareState | null> {
+  const trimmed = hash.startsWith('#') ? hash.slice(1) : hash
+  if (!trimmed.startsWith('z')) return decodeShareState(trimmed)
+  if (typeof DecompressionStream === 'undefined') return null
+  try {
+    const bytes = await pipeBytes(base64UrlToBytes(trimmed.slice(1)), new DecompressionStream('deflate-raw'))
+    return parseSharePayload(JSON.parse(new TextDecoder().decode(bytes)))
   } catch {
     return null
   }

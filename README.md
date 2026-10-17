@@ -151,10 +151,23 @@ The **paper** and **neon** buttons switch between a light and a dark theme.
 | Fit curves vertically | `f`                              |
 | Hover values          | Move the mouse over the canvas   |
 
-## Sharing
+## Sharing and export
 
 Click **share** to copy a link containing your equations *and* viewport.
-Opening the link loads the exact same view. If there is nothing to share
+Opening the link loads the exact same view. Links are compressed (they
+start with `#z`); older uncompressed links still open.
+
+The **file** menu next to it has:
+
+- **saved graphs…**: save the current graph under a name in this browser,
+  then load or delete saved graphs. Loading is one undo step.
+- **export JSON** / **import JSON…**: move a graph between browsers as a
+  `graph.json` file.
+- **export PNG** / **export SVG**: download the current view as an image.
+  SVG is vector (the complex field is embedded as a picture).
+- **copy embed code**: copies an `<iframe>` for blogs and docs. The embed
+  URL adds `?embed=1`, which hides the editing UI, keeps pan and zoom, and
+  never writes to the visitor's saved work. If there is nothing to share
 yet, you'll see the notice `nothing to share yet — add an equation first`;
 a `copied` badge confirms a successful copy.
 
